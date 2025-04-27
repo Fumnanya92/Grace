@@ -1,0 +1,32 @@
+[
+  {
+    "timestamp": "2025-04-26T08:57:01.551797",
+    "sender": " 1234567890",
+    "user_message": "hello",
+    "bot_reply": "Hi gorgeous! \ud83c\udf1f Let's design something amazing for your customers! Should I show you our best-selling designs?"
+  },
+  {
+    "timestamp": "2025-04-26T08:58:07.381388",
+    "sender": " 1234567890",
+    "user_message": "hi",
+    "bot_reply": "Welcome back! \u2728 Shall we continue with your wholesale order? Should I show you our best-selling designs?"
+  },
+  {
+    "timestamp": "2025-04-26T08:58:15.148024",
+    "sender": " 1234567890",
+    "user_message": "I want to enquire about your wholesale",
+    "bot_reply": "\ud83d\udce6 *PREMIUM WHOLESALE PACKAGE*\n- 4 designs, 40 pieces total \n- \u20a6600000 (50% deposit required)\n- 10 working days production\n- Includes: 4 videos + brand labels\n\nAfter the 50% deposit is made, we'll discuss your preferred prints. \nDo you have 4 designs ready, or should I share our catalog with you?"
+  },
+  {
+    "timestamp": "2025-04-26T08:58:22.111010",
+    "sender": " 1234567890",
+    "user_message": "xyz",
+    "bot_reply": "I'm here to assist you with your wholesale inquiries. How can I help?"
+  },
+  {
+    "timestamp": "2025-04-26T08:58:39.594891",
+    "sender": " 1234567890",
+    "user_message": "",
+    "bot_reply": "Please send a message or an image."
+  }
+]

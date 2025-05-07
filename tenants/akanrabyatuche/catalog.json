@@ -1,0 +1,16 @@
+{
+    "products": [
+        {
+            "id": "bukky_dashiki",
+            "name": "Bukky Dashiki",
+            "price": 15000,
+            "image": "https://example.com/bukky_dashiki.jpg"
+        },
+        {
+            "id": "cece_dashiki",
+            "name": "Cece Dashiki",
+            "price": 15000,
+            "image": "https://example.com/cece_dashiki.jpg"
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "greetings": "Hello there! Welcome to our store. How can I assist you today?",
+    "ask_for_designs": "Sure! I\u2019ll send over our best designs shortly. Feel free to pick what you like.",
+    "package_details": "Our wholesale package is designed to give you great value.",
+    "deposit_instructions": "To proceed, please make payment using the account details below.",
+    "payment_confirmed": "Awesome! We've received your payment. We'll now process your order.",
+    "selection_confirmation": "Perfect! We\u2019ve recorded your selection.",
+    "funny_redirects": "Haha, let\u2019s focus on your order! \ud83d\ude09",
+    "self_introduction": "I'm Grace, your AI assistant!",
+    "default_response": "Let me get that information for you.",
+    "error_response": "Oops! Something went wrong. Please try again."
+}

@@ -85,6 +85,12 @@ class Config:
         }
     }
 
+    # Social Media and Shop Links
+    LINKS: Dict[str, str] = {
+        'ig_link': os.getenv('IG_LINK', 'https://instagram.com/atuchewoman'),
+        'shop_link': os.getenv('SHOP_LINK', 'https://atuchewoman.com/shop')
+    }
+
     logging.info("Configuration loaded successfully.")
 
 # Singleton configuration instance

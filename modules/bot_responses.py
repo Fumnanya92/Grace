@@ -1,11 +1,9 @@
-# modules/bot_responses.py
-
 import re
 import os
 import time
 import logging
 import asyncio
-from typing import List, Dict
+from typing import List, Dict, Callable
 from urllib.parse import urlparse, urlunparse
 
 from openai import AsyncOpenAI
@@ -20,14 +18,13 @@ from modules.intent_recognition_module import recognize_intent
 
 logger = configure_logger("bot_responses")
 
-# Constants
 MAX_IMAGES = 10
 MAX_HISTORY_LENGTH = 1000
 MAX_HISTORY_MESSAGES = 6
 REQUEST_TIMEOUT = 15
 
 image_processor = ImageProcessor(S3Service())
-image_history = {}  # Temporary: consider tenant-specific DB storage
+image_history = {}
 
 class BotResponses:
     def __init__(self, tenant_id: str):
@@ -35,24 +32,41 @@ class BotResponses:
         self.brain = GraceBrain(tenant_id)
         self.gpt_client = AsyncOpenAI(timeout=REQUEST_TIMEOUT)
 
+    def intent_handlers(self) -> Dict[str, Callable]:
+        return {
+            "greetings": self.handle_configured_text,
+            "package_details": self.handle_configured_text,
+            "deposit_instructions": self.handle_configured_text,
+            "payment_confirmed": self.handle_configured_text,
+            "selection_confirmation": self.handle_configured_text,
+            "self_introduction": self.handle_configured_text,
+            "business_hours": self.handle_business_hours,
+            "catalog_request": self.handle_catalog_response,
+            "off_topic": self.handle_off_topic
+        }
+
     async def handle_text_message(self, sender: str, message: str, conversation_history: list) -> str:
         logger.info(f"[{self.tenant_id}] Handling message from {sender}: {message}")
         try:
             message = normalize_message(message)
 
             if await detect_picture_request(message):
-                return await self.fetch_images_and_respond()
+                return await self.handle_catalog_response("catalog_request", message, conversation_history)
 
             intents = recognize_intent(message)
+            handlers = self.intent_handlers()
+
             for intent in intents:
-                response = await self.brain.get_response_by_intent(intent)
-                if response:
-                    return response
+                handler = handlers.get(intent)
+                if handler:
+                    response = await handler(intent, message, conversation_history)
+                    if response:
+                        return response
 
             return await self.generate_fallback_response(conversation_history, message)
 
         except Exception as e:
-            logger.error(f"[{self.tenant_id}] Text message handling error: {e}", exc_info=True)
+            logger.error(f"[{self.tenant_id}] Error handling message: {e}", exc_info=True)
             return await self.brain.get_response("error_response")
 
     async def handle_media_message(self, sender: str, media_url: str, media_type: str) -> str:
@@ -69,21 +83,30 @@ class BotResponses:
                 return await self.brain.get_response("image_error")
         return await self.brain.get_response("unsupported_media")
 
-    async def fetch_images_and_respond(self) -> str:
+    async def handle_configured_text(self, intent: str, message: str, history: list) -> str:
+        return await self.brain.get_response(intent)
+
+    async def handle_business_hours(self, intent: str, message: str, history: list) -> str:
+        hours = self.brain.get_business_hours()
+        return f"We're open from {hours['start']} to {hours['end']}."
+
+    async def handle_catalog_response(self, intent: str, message: str, history: list) -> str:
         try:
             catalog = await self.brain.get_catalog()
             if not catalog:
-                return await self.brain.get_response("image_not_found")
+                return await self.brain.get_response("catalog_empty")
 
-            response_lines = [await self.brain.get_response("image_instructions")]
+            lines = [await self.brain.get_response("catalog_intro")]
             for item in catalog[:MAX_IMAGES]:
-                url = urlunparse(urlparse(item["url"])._replace(query=""))
-                response_lines.append(f"{item['name']}: {url}")
-            return "\n".join(response_lines)
-
+                clean_url = urlunparse(urlparse(item["url"])._replace(query=""))
+                lines.append(f"{item['name']}: {clean_url}")
+            return "\n".join(lines)
         except Exception as e:
             logger.error(f"[{self.tenant_id}] Catalog fetch failed: {e}", exc_info=True)
-            return await self.brain.get_response("image_not_found")
+            return await self.brain.get_response("catalog_error")
+
+    async def handle_off_topic(self, intent: str, message: str, history: list) -> str:
+        return await self.brain.get_response("funny_redirects")
 
     async def generate_fallback_response(self, history: List[Dict[str, str]], latest_user_message: str) -> str:
         try:

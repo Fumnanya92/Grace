@@ -15,6 +15,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 from pydantic import BaseModel
+from tenant_uploads import router as tenant_upload_router
 
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
@@ -45,6 +46,7 @@ if config.APP['debug']:
 class PaymentVerification(BaseModel):
     code: str
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await startup()
@@ -72,9 +74,14 @@ async def start_ngrok():
         logger.error(f"Error starting Ngrok: {e}")
 
 def get_tenant_from_sender(sender: str) -> str:
-    """Basic tenant resolver (replace with DB or config lookup if needed)."""
+    """Determine tenant ID based on sender number using tenant_map.json."""
     phone_number = sender.replace("whatsapp:", "")
-    return phone_number  # You can map this to tenant folders later
+    map_path = os.path.join("tenants", "tenant_map.json")
+    if os.path.exists(map_path):
+        with open(map_path) as f:
+            tenant_map = json.load(f)
+            return tenant_map.get(phone_number, "default")
+    return "default"
 
 @app.post("/webhook")
 async def handle_webhook(
@@ -215,6 +222,8 @@ async def refresh_cached_images():
 @lru_cache(maxsize=1)
 async def cached_health_check():
     return await health_check()
+
+app.include_router(tenant_upload_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=config.APP['debug'])

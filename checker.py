@@ -1,4 +1,3 @@
-# grace_brain.py
 import json
 import os
 import re
@@ -23,8 +22,7 @@ class GraceBrain:
         self.catalog = self._load_file("catalog.json", default=[])
         self.fallbacks = self._load_file(DEFAULT_FALLBACKS, default={})
 
-    def load_file(self, filename: str, default: Optional[dict] = None) -> dict:
-        """Safely load a JSON file with a fallback default."""
+    def _load_file(self, filename: str, default: Optional[dict] = None) -> dict:
         path = os.path.join(self.tenant_path, filename)
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -37,20 +35,14 @@ class GraceBrain:
             return default or {}
 
     async def get_response(self, key: str, **kwargs) -> str:
-        """
-        Fetch a dynamic response using the tenant’s speech library.
-        If not found, fallback to default templates.
-        """
         responses = self.speech_library.get("responses", {}).get(key, [])
         if responses:
             response = responses[0].get("response", "")
             return response.format(**kwargs)
-
         logger.warning(f"No response found for key '{key}' in tenant speech_library.")
         return self.fallbacks.get(key, f"[{key}] I'm still learning how to respond to this.")
 
     def get_catalog(self) -> list:
-        """Return tenant’s current product catalog."""
         return self.catalog
 
     def get_config_value(self, key: str, default=None):
@@ -69,35 +61,19 @@ class GraceBrain:
         return self.config.get("catalog_enabled", False)
 
     def load_tone(self) -> dict:
-        try:
-            with open(os.path.join(self.tenant_path, "tone.json"), "r") as file:
-                return json.load(file)
-        except Exception:
-            logger.warning(f"No tone.json found for {self.tenant_id}, using default tone.")
-            return {
-                "greeting_prefix": "Hello 👋",
-                "tone": "neutral",
-                "fallback_persona": "You are Grace, a helpful sales assistant guiding users toward making purchases."
-            }
-
-    def load_config(self) -> dict:
-        try:
-            with open(os.path.join(self.tenant_path, "config.json"), "r") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load config.json for {self.tenant_id}: {e}")
-            return {}
+        return self.tone_config or {
+            "greeting_prefix": "Hello 👋",
+            "tone": "neutral",
+            "fallback_persona": "You are Grace, a helpful sales assistant guiding users toward making purchases."
+        }
 
     async def build_prompt(self, formatted_history: str, user_message: str) -> str:
         tone = self.load_tone()
         persona = tone.get("fallback_persona", "You are Grace, a helpful assistant.")
-        greeting = tone.get("greeting_prefix", "Hello 👋")
-
         catalog_intro = "\n".join(
             [f"- {item['name']}: ₦{item.get('price', 'N/A')}" for item in self.catalog[:5]]
         )
-        intent_keys = self.load_config().get("intent_keys", [])
-
+        keys = self.get_intent_keys()
         return (
             f"{persona}\n"
             f"Recent conversation:\n{formatted_history}\n\n"
@@ -105,14 +81,12 @@ class GraceBrain:
             f"Product Highlights:\n{catalog_intro}\n"
             "Respond conversationally and helpfully, with a warm tone.\n"
             "Only use one of the following keys to tag your message: "
-            + ", ".join([f"[[{k}]]" for k in intent_keys]) + ".\n"
+            + ", ".join([f"[[{k}]]" for k in keys]) + ".\n"
         )
 
     def extract_response_key(self, text: str) -> str:
         match = re.search(r"\[\[(.*?)\]\]", text)
-        if match:
-            return match.group(1)
-        return "default_response"
+        return match.group(1) if match else "default_response"
 
     async def update_library(self, key: str, user_input: str, ai_response: str):
         entry = {"phrase": user_input, "confidence": 0.5}
@@ -123,7 +97,6 @@ class GraceBrain:
 
         if entry not in self.speech_library["intents"][key]:
             self.speech_library["intents"][key].append(entry)
-
         if reply not in self.speech_library["responses"][key]:
             self.speech_library["responses"][key].append(reply)
 

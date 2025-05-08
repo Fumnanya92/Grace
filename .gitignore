@@ -31,6 +31,8 @@ env/
 memory.db
 flow_progress.json
 speech_library.json
+generate_api_key.py
+tenant_map.json
 
 # Test and temp files
 *.tmp

@@ -123,7 +123,7 @@
   </style>
 </head>
 <body>
-  <form id="uploadForm" action="/upload_asset" method="post" enctype="multipart/form-data">
+  <form id="uploadForm" method="post" enctype="multipart/form-data">
     <h2>Upload JSON File to Tenant</h2>
     <label>API Key: <input type="text" name="api_key" required></label>
     <label>Tenant ID: <input type="text" name="tenant_id" required></label>
@@ -146,22 +146,38 @@
   </div>
 
   <script>
-    // Handle form submission
-    document.getElementById('uploadForm').addEventListener('submit', function(event) {
-      event.preventDefault(); // Prevent the form from submitting immediately
-
-      // Show the completion message after form submission
-      document.getElementById('completionMessage').style.display = 'block';
-
-      // Optionally, reset the form after showing the message
-      document.getElementById('uploadForm').reset();
+    document.getElementById('uploadForm').addEventListener('submit', async function(event) {
+      event.preventDefault();
+  
+      const form = event.target;
+      const formData = new FormData(form);
+      const tenantId = formData.get('tenant_id');
+      const apiKey = formData.get('api_key');
+  
+      const endpoint = `/admin/${tenantId}/upload`;
+  
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          body: formData
+        });
+  
+        if (response.ok) {
+          document.getElementById('completionMessage').style.display = 'block';
+          form.reset();
+        } else {
+          const error = await response.json();
+          alert("Upload failed: " + (error.detail || "Unknown error"));
+        }
+      } catch (err) {
+        alert("Upload failed: " + err.message);
+      }
     });
-
-    // Handle save button (you can define its function here)
+  
     document.getElementById('saveButton').addEventListener('click', function() {
       alert('Form data has been saved!');
-      // You can add functionality to save the form data as needed
+      // Optional: implement localStorage or cache saving here
     });
-  </script>
+  </script>  
 </body>
 </html>

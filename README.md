@@ -328,4 +328,27 @@ Great — now that we have a unified and detailed proposal for Grace, the next b
 
 ---
 
-Would you like me to scaffold the codebase for Phase 1 (Twilio + FastAPI + LangChain + RAG + Catalog input) so you can start developing right away?
+
+
+Feature | Status | Description
+🧱 Stack Setup | ✅ Done | FastAPI + GPT-4 + Twilio + Multi-Tenant JSON architecture
+🧠 Core AI Engine | ✅ Done | Dynamic fallback + tenant-based tone + GPT streaming
+🛜 WhatsApp Integration | ✅ Done | Incoming Twilio messages routed to GPT handler
+📦 Catalog Handling | ✅ Done | Upload + serve tenant-specific catalog via /admin/{tenant_id}/upload
+🧾 Config Management | ✅ Done | All tone, config, payment details loaded per tenant
+🗣️ Speech Library | ✅ Done | Phrase–response format for better editing and learning
+🛒 Sales Flow | ✅ Done | Greeting → Product Inquiry → Pricing → Payment → Confirmation
+📋 Admin UI | ✅ Done | Drag-and-drop style upload page to manage tenant assets
+Task | Status | Description
+🗃️ Admin Upload Routes | ✅ Done | Secure /admin/{tenant_id}/upload route for tone, catalog, config
+🖼️ Admin Upload UI | ✅ Done | Upload HTML form with validation and styling
+🔐 API Key Support | ✅ Done | API key required per tenant (via tenant_map.json)
+📁 Tenant Map File | ✅ Done | Maps phone numbers to tenant folders and API keys
+🧠 Speech Library Format | ✅ Done | Unified phrase–response per entry (training_data[])
+🔎 GPT-Backed Fallback | ✅ Done | Grace falls back to GPT-4 with contextual prompt + catalog RAG
+🕰️ Business Hours Handling | ✅ Done | Responds to queries like "what time do you open?"
+💳 Payment Info Access | ✅ Done | Grace uses tenant config to reply with bank/account details
+🎯 Dynamic Intent Mapping | ✅ Done | Intent key list is configurable in each tenant’s config.json
+🧪 Validation & Logging | 🟡 In Progress | Stronger upload validation, chat-level error handling
+🔧 Admin Authentication | 🔲 Not Started | Add login/session for admin dashboard (optional)
+📊 Analytics Dashboard | 🔲 Not Started | Track intents, drop-off, conversion trends (Phase 3)

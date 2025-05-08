@@ -1,5 +1,10 @@
 {
-    "+2347082229034": "akanrabyatuche",
-    "+2348123456789": "another-business"
+  "+2347082229034": {
+    "tenant_id": "akanrabyatuche",
+    "api_key": "da5d592789254ae0bada948f5f394c9f"
+  },
+  "+2347011122233": {
+    "tenant_id": "stylistqueen",
+    "api_key": "stylist_secure_456"
   }
-  
+}

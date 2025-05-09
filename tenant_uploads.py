@@ -1,14 +1,18 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.security import APIKeyHeader
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 import os, json, shutil
 from dotenv import load_dotenv
+import logging
+load_dotenv()
 
+# Configure logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 router = APIRouter()
 TENANTS_DIR = "tenants"
-ASSET_TYPES = ["catalog", "tone", "config", "fallback_responses"]
 
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
@@ -19,35 +23,66 @@ def get_tenant_map() -> dict:
             return json.load(f)
     return {}
 
-@router.post("/upload_asset")
-async def upload_asset(
-    tenant_id: str = Form(...),
-    asset_type: str = Form(...),
-    file: UploadFile = File(...),
-    api_key: str = Depends(api_key_header)
-):
-    if api_key != os.getenv("ADMIN_API_KEY"):
-        raise HTTPException(status_code=403, detail="Unauthorized")
+def validate_json_schema(data: dict, file_type: str):
+    required_fields = {
+        "catalog": ["id", "name", "description", "price"],
+        "tone": ["tone_id", "tone_name"],
+        "fallback_responses": ["response_id", "response_text"],
+        "config": ["setting", "value"]
+    }
+    for field in required_fields.get(file_type, []):
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
-    if asset_type not in ASSET_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported asset_type. Use one of: {ASSET_TYPES}")
+@router.post("/admin/{tenant_id}/upload", response_class=HTMLResponse)
+async def upload_file(request: Request, tenant_id: str,
+                      file: UploadFile = File(...),
+                      file_type: str = Form(...),
+                      api_key: str = Depends(api_key_header)):
+    tenant_map = get_tenant_map()
+    tenant_info = tenant_map.get(tenant_id)
 
+    # Validate tenant and API key
+    if not tenant_info:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_id}' not found")
+    if tenant_info.get("api_key") != api_key:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    # Ensure tenant directory exists
     tenant_path = os.path.join(TENANTS_DIR, tenant_id)
     os.makedirs(tenant_path, exist_ok=True)
-    dest_path = os.path.join(tenant_path, f"{asset_type}.json")
+
+    # Map file types to filenames
+    filename_map = {
+        "catalog": "catalog.json",
+        "tone": "tone.json",
+        "fallback_responses": "fallback_responses.json",
+        "config": "config.json"
+    }
+
+    if file_type not in filename_map:
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    file_path = os.path.join(tenant_path, filename_map[file_type])
 
     try:
-        with open(dest_path, "wb") as buffer:
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        with open(dest_path, "r") as f:
-            json.load(f)  # Validate it's proper JSON
+        # Validate JSON format and schema
+        with open(file_path, "r") as f:
+            data = json.load(f)
+            validate_json_schema(data, file_type)
 
-        return JSONResponse(content={"message": f"{asset_type}.json uploaded successfully for {tenant_id}"})
+        logger.info(f"File '{file_type}' uploaded successfully for tenant '{tenant_id}'")
+        return RedirectResponse(f"/admin/{tenant_id}?success={file_type}_uploaded", status_code=302)
 
-    except json.JSONDecodeError:
-        os.remove(dest_path)
+    except json.JSONDecodeError as e:
+        os.remove(file_path)
+        logger.error(f"Invalid JSON file uploaded for tenant '{tenant_id}': {e}")
         raise HTTPException(status_code=400, detail="Uploaded file is not valid JSON")
 
     except Exception as e:
+        logger.error(f"Error uploading file for tenant '{tenant_id}': {e}")
         raise HTTPException(status_code=500, detail=str(e))

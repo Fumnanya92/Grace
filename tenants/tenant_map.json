@@ -1,10 +1,17 @@
 {
-  "+2347082229034": {
-    "tenant_id": "akanrabyatuche",
-    "api_key": "da5d592789254ae0bada948f5f394c9f"
+  "akanrabyatuche": {
+    "api_key": "da5d592789254ae0bada948f5f394c9f",
+    "business_name": "Akanraby Atuche",
+    "platforms": ["whatsapp", "instagram"]
   },
-  "+2347011122233": {
-    "tenant_id": "stylistqueen",
-    "api_key": "stylist_secure_456"
+  "atuche_woman": {
+    "api_key": "stylist_secure_456",
+    "business_name": "Atuche Woman",
+    "platforms": ["whatsapp"]
+  },
+  "stylist_empire": {
+    "api_key": "stylist_secure_123",
+    "business_name": "Stylist Empire",
+    "platforms": ["instagram"]
   }
 }

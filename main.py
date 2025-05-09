@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, status, Form, Response, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from twilio.twiml.messaging_response import MessagingResponse
 from pyngrok import ngrok, conf
 import os
@@ -16,12 +17,13 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from pydantic import BaseModel
 from tenant_uploads import router as tenant_upload_router
+from admin.routes import router as admin_router
 
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
 from modules.s3_service import S3Service
 from modules.image_processing_module import ImageProcessor
-from modules.utils import detect_picture_request, cached_list_images
+from modules.utils import detect_picture_request, cached_list_images, get_tenant_map
 from modules.bot_responses import BotResponses
 from config import config
 from logging_config import configure_logger
@@ -55,6 +57,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Serve the tenants directory as static files
+app.mount("/tenants", StaticFiles(directory="tenants"), name="tenants")
+
+# Include the tenant uploads router
+app.include_router(tenant_upload_router)
+
+# Include the admin router
+app.include_router(admin_router)
+
 async def startup():
     logger.info("Starting Grace...")
     asyncio.create_task(refresh_cached_images())
@@ -73,15 +84,7 @@ async def start_ngrok():
     except Exception as e:
         logger.error(f"Error starting Ngrok: {e}")
 
-def get_tenant_from_sender(sender: str) -> str:
-    """Determine tenant ID based on sender number using tenant_map.json."""
-    phone_number = sender.replace("whatsapp:", "")
-    map_path = os.path.join("tenants", "tenant_map.json")
-    if os.path.exists(map_path):
-        with open(map_path) as f:
-            tenant_map = json.load(f)
-            return tenant_map.get(phone_number, "default")
-    return "default"
+
 
 @app.post("/webhook")
 async def handle_webhook(
@@ -96,8 +99,12 @@ async def handle_webhook(
     message = Body.strip()
     media_url = MediaUrl0
     media_type = MediaContentType0
+    logger.info(f"Sender: {sender}")
 
-    tenant_id = get_tenant_from_sender(sender)
+    # Identify tenant (default to single tenant if multi-tenancy is not enabled)
+    tenant_id = "default"
+    logger.info(f"Using default tenant configuration for sender: {sender}")
+
     responses = BotResponses(tenant_id)
 
     try:
@@ -141,6 +148,9 @@ async def upload_catalog(
     tenant_id: str = Form(...),
     file: UploadFile = File(...)
 ):
+    if not isinstance(tenant_id, str):
+        raise TypeError(f"Expected tenant_id to be str, got {type(tenant_id)}")
+
     tenant_path = os.path.join(TENANTS_DIR, tenant_id)
     os.makedirs(tenant_path, exist_ok=True)
     catalog_path = os.path.join(tenant_path, "catalog.json")
@@ -210,6 +220,8 @@ async def log_chat(sender: str, user_msg: str, bot_reply: str) -> None:
                 await file.write(json.dumps([log_entry], indent=2))
 
         logger.info(f"Logged message for {clean_sender}")
+    except PermissionError as e:
+        logger.error(f"Permission denied while logging chat for {clean_sender}: {e}")
     except Exception as e:
         logger.error(f"Error logging chat for {clean_sender}: {e}")
 
@@ -222,8 +234,6 @@ async def refresh_cached_images():
 @lru_cache(maxsize=1)
 async def cached_health_check():
     return await health_check()
-
-app.include_router(tenant_upload_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=config.APP['debug'])

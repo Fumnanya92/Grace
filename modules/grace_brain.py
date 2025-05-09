@@ -11,10 +11,17 @@ TENANTS_DIR = "tenants"
 DEFAULT_FALLBACKS = "fallback_responses.json"
 
 class GraceBrain:
-    def __init__(self, tenant_id: str = "akanrabyatuche"):
+    def __init__(self, tenant_id: str):
+        if not isinstance(tenant_id, str):
+            raise TypeError(f"Expected tenant_id to be str, got {type(tenant_id)}")
+        
         self.tenant_id = tenant_id
-        self.tenant_path = os.path.join(TENANTS_DIR, self.tenant_id)
+        self.tenant_path = os.path.join(TENANTS_DIR, tenant_id)
 
+        # Check if the tenant directory exists
+        if not os.path.isdir(self.tenant_path):
+            raise FileNotFoundError(f"Tenant directory '{self.tenant_path}' does not exist.")
+        
         logger.info(f"GraceBrain initialized for tenant: {self.tenant_id}")
 
         self.config = self._load_file("config.json", default={})
@@ -23,7 +30,7 @@ class GraceBrain:
         self.catalog = self._load_file("catalog.json", default=[])
         self.fallbacks = self._load_file(DEFAULT_FALLBACKS, default={})
 
-    def load_file(self, filename: str, default: Optional[dict] = None) -> dict:
+    def _load_file(self, filename: str, default: Optional[dict] = None) -> dict:
         """Safely load a JSON file with a fallback default."""
         path = os.path.join(self.tenant_path, filename)
         try:
@@ -37,10 +44,7 @@ class GraceBrain:
             return default or {}
 
     async def get_response(self, key: str, **kwargs) -> str:
-        """
-        Fetch a dynamic response using the tenant’s speech library.
-        If not found, fallback to default templates.
-        """
+        """Fetch a dynamic response using the tenant’s speech library or fallback."""
         responses = self.speech_library.get("responses", {}).get(key, [])
         if responses:
             response = responses[0].get("response", "")
@@ -49,7 +53,7 @@ class GraceBrain:
         logger.warning(f"No response found for key '{key}' in tenant speech_library.")
         return self.fallbacks.get(key, f"[{key}] I'm still learning how to respond to this.")
 
-    def get_catalog(self) -> list:
+    def get_catalog(self) -> List[Dict[str, str]]:
         """Return tenant’s current product catalog."""
         return self.catalog
 
@@ -67,6 +71,17 @@ class GraceBrain:
 
     def is_catalog_enabled(self) -> bool:
         return self.config.get("catalog_enabled", False)
+
+    def get_business_info(self) -> Dict:
+        """Return general business info used across messages or prompts."""
+        return {
+            "name": self.config.get("business_name"),
+            "type": self.config.get("business_type"),
+            "instagram": self.config.get("instagram"),
+            "shop_link": self.config.get("shop_link"),
+            "currency": self.config.get("currency"),
+            "delivery_time_days": self.config.get("delivery_time_days"),
+        }
 
     def load_tone(self) -> dict:
         try:
@@ -96,7 +111,7 @@ class GraceBrain:
         catalog_intro = "\n".join(
             [f"- {item['name']}: ₦{item.get('price', 'N/A')}" for item in self.catalog[:5]]
         )
-        intent_keys = self.load_config().get("intent_keys", [])
+        intent_keys = self.get_intent_keys()
 
         return (
             f"{persona}\n"

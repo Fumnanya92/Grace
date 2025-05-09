@@ -11,10 +11,10 @@ from config import config
 from logging_config import configure_logger
 
 from modules.grace_brain import GraceBrain
-from modules.utils import normalize_message, detect_picture_request
+from modules.utils import detect_picture_request
 from modules.image_processing_module import ImageProcessor
 from modules.s3_service import S3Service
-from modules.intent_recognition_module import recognize_intent
+from modules.intent_recognition_module import recognize_intent, normalize_message
 
 logger = configure_logger("bot_responses")
 
@@ -62,7 +62,6 @@ class BotResponses:
                     response = await handler(intent, message, conversation_history)
                     if response:
                         return response
-
             return await self.generate_fallback_response(conversation_history, message)
 
         except Exception as e:
@@ -81,6 +80,10 @@ class BotResponses:
             except Exception as e:
                 logger.error(f"[{self.tenant_id}] Image processing error: {e}", exc_info=True)
                 return await self.brain.get_response("image_error")
+        if media_type.startswith("video/"):
+            return "Thank you for sending a video. We'll review it shortly."
+        elif media_type.startswith("application/"):
+            return "Thank you for sending a document. We'll review it shortly."
         return await self.brain.get_response("unsupported_media")
 
     async def handle_configured_text(self, intent: str, message: str, history: list) -> str:
@@ -98,6 +101,9 @@ class BotResponses:
 
             lines = [await self.brain.get_response("catalog_intro")]
             for item in catalog[:MAX_IMAGES]:
+                if "name" not in item or "url" not in item:
+                    logger.warning(f"Invalid catalog item: {item}")
+                    continue
                 clean_url = urlunparse(urlparse(item["url"])._replace(query=""))
                 lines.append(f"{item['name']}: {clean_url}")
             return "\n".join(lines)
@@ -138,7 +144,7 @@ class BotResponses:
 
         except Exception as e:
             logger.error(f"[{self.tenant_id}] Fallback GPT response failed: {e}", exc_info=True)
-            return await self.brain.get_response("error_response")
+            return "I'm sorry, I couldn't process your request. Please try again later."
 
     def format_conversation(self, history: List[Dict[str, str]]) -> str:
         formatted = [

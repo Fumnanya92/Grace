@@ -3,7 +3,7 @@ import os
 import time
 import logging
 import asyncio
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Optional
 from urllib.parse import urlparse, urlunparse
 
 from openai import AsyncOpenAI
@@ -27,12 +27,12 @@ image_processor = ImageProcessor(S3Service())
 image_history = {}
 
 class BotResponses:
-    def __init__(self, tenant_id: str):
-        self.tenant_id = tenant_id
-        self.brain = GraceBrain(tenant_id)
+    def __init__(self):
+        self.brain = GraceBrain()
         self.gpt_client = AsyncOpenAI(timeout=REQUEST_TIMEOUT)
 
     def intent_handlers(self) -> Dict[str, Callable]:
+        """Map intents to their respective handlers."""
         return {
             "greetings": self.handle_configured_text,
             "package_details": self.handle_configured_text,
@@ -45,31 +45,41 @@ class BotResponses:
             "off_topic": self.handle_off_topic
         }
 
-    async def handle_text_message(self, sender: str, message: str, conversation_history: list) -> str:
-        logger.info(f"[{self.tenant_id}] Handling message from {sender}: {message}")
+    async def handle_text_message(
+        self,
+        sender: str,
+        message: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> str:
+        """Process a plain‑text WhatsApp message."""
+        conversation_history = conversation_history or []
+        logger.info("Handling message from %s: %s", sender, message)
+
         try:
             message = normalize_message(message)
 
+            # Quick check: picture request → shortcut to catalog
             if await detect_picture_request(message):
                 return await self.handle_catalog_response("catalog_request", message, conversation_history)
 
-            intents = recognize_intent(message)
-            handlers = self.intent_handlers()
-
-            for intent in intents:
-                handler = handlers.get(intent)
+            # Route by recognized intents
+            for intent in recognize_intent(message):
+                handler = self.intent_handlers().get(intent)
                 if handler:
                     response = await handler(intent, message, conversation_history)
                     if response:
                         return response
+
+            # Nothing matched → fallback to GPT
             return await self.generate_fallback_response(conversation_history, message)
 
-        except Exception as e:
-            logger.error(f"[{self.tenant_id}] Error handling message: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Error while handling message")
             return await self.brain.get_response("error_response")
 
     async def handle_media_message(self, sender: str, media_url: str, media_type: str) -> str:
-        logger.info(f"[{self.tenant_id}] Received media from {sender}")
+        """Handle incoming media messages."""
+        logger.info(f"Received media from {sender}")
         if media_type.startswith("image/"):
             try:
                 image_history.setdefault(sender, []).append({
@@ -78,7 +88,7 @@ class BotResponses:
                 })
                 return await image_processor.handle_image(sender, media_url)
             except Exception as e:
-                logger.error(f"[{self.tenant_id}] Image processing error: {e}", exc_info=True)
+                logger.error(f"Image processing error: {e}", exc_info=True)
                 return await self.brain.get_response("image_error")
         if media_type.startswith("video/"):
             return "Thank you for sending a video. We'll review it shortly."
@@ -87,13 +97,16 @@ class BotResponses:
         return await self.brain.get_response("unsupported_media")
 
     async def handle_configured_text(self, intent: str, message: str, history: list) -> str:
+        """Handle intents with pre-configured text responses."""
         return await self.brain.get_response(intent)
 
     async def handle_business_hours(self, intent: str, message: str, history: list) -> str:
+        """Handle requests for business hours."""
         hours = self.brain.get_business_hours()
         return f"We're open from {hours['start']} to {hours['end']}."
 
     async def handle_catalog_response(self, intent: str, message: str, history: list) -> str:
+        """Handle catalog requests."""
         try:
             catalog = await self.brain.get_catalog()
             if not catalog:
@@ -108,24 +121,33 @@ class BotResponses:
                 lines.append(f"{item['name']}: {clean_url}")
             return "\n".join(lines)
         except Exception as e:
-            logger.error(f"[{self.tenant_id}] Catalog fetch failed: {e}", exc_info=True)
+            logger.error(f"Catalog fetch failed: {e}", exc_info=True)
             return await self.brain.get_response("catalog_error")
 
     async def handle_off_topic(self, intent: str, message: str, history: list) -> str:
+        """Handle off-topic messages."""
         return await self.brain.get_response("funny_redirects")
 
-    async def generate_fallback_response(self, history: List[Dict[str, str]], latest_user_message: str) -> str:
-        try:
-            formatted = self.format_conversation(history)
-            prompt = await self.brain.build_prompt(formatted, latest_user_message)
+    async def generate_fallback_response(
+        self,
+        history: List[Dict[str, str]],
+        latest_user_message: str,
+    ) -> str:
+        """Stream a GPT‑4o response when no intent matched."""
+        formatted = self.format_conversation(history)
+        prompt = await self.brain.build_prompt(formatted, latest_user_message)
 
+        try:
             async with self.gpt_client.beta.realtime.connect(model="gpt-4o-realtime-preview") as conn:
                 await conn.session.update(session={"modalities": ["text"]})
-                await conn.conversation.item.create({
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}]
-                })
+
+                # 🔑 ***BUGFIX*** → pass kwargs, not positional dict
+                await conn.conversation.item.create(
+                    type="message",
+                    role="user",
+                    content=[{"type": "input_text", "text": prompt}],
+                )
+
                 await conn.response.create()
 
                 full_response = ""
@@ -134,19 +156,17 @@ class BotResponses:
                         full_response += event.delta
                     elif event.type == "response.text.done":
                         break
-
-            matched_key = self.brain.extract_response_key(full_response)
-            reply = await self.brain.get_response(matched_key)
-            if not reply:
-                reply = full_response
-            await self.brain.update_library(matched_key, latest_user_message, reply)
-            return reply
-
-        except Exception as e:
-            logger.error(f"[{self.tenant_id}] Fallback GPT response failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Fallback GPT failed")
             return "I'm sorry, I couldn't process your request. Please try again later."
 
+        matched_key = self.brain.extract_response_key(full_response)
+        reply = await self.brain.get_response(matched_key) or full_response
+        await self.brain.update_library(matched_key, latest_user_message, reply)
+        return reply
+
     def format_conversation(self, history: List[Dict[str, str]]) -> str:
+        """Format conversation history for AI prompts."""
         formatted = [
             f"{entry['role']}: {entry['content']}"
             for entry in history[-MAX_HISTORY_MESSAGES:]

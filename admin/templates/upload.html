@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grace Admin · Upload Tenant Asset</title>
+  <title>Grace Admin · Upload Configuration</title>
   <!-- Google Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -50,28 +50,6 @@
       padding: 3rem 2.5rem 2.25rem;
     }
 
-    .card::before {
-      content: '';
-      position: absolute;
-      inset: -8px;
-      z-index: -1;
-      border-radius: inherit;
-      background: conic-gradient(
-        from -90deg,
-        var(--clr-primary) 0deg 120deg,
-        transparent 120deg 240deg,
-        var(--clr-primary-light) 240deg 360deg
-      );
-      filter: blur(40px) opacity(0.4);
-      animation: spin 12s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(1turn);
-      }
-    }
-
     h1 {
       font-size: 1.5rem;
       font-weight: 600;
@@ -109,19 +87,6 @@
       box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
     }
 
-    /* File Input Customization */
-    .field input[type='file']::before {
-      content: 'Choose file';
-      display: inline-block;
-      background: var(--clr-primary);
-      color: #fff;
-      padding: 0.55rem 1.25rem;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      font-size: 0.85rem;
-      margin-right: 1rem;
-    }
-
     /* Button */
     .btn {
       width: 100%;
@@ -136,11 +101,6 @@
 
     .btn:hover {
       background: var(--clr-primary-dark);
-    }
-
-    /* Add spacing between buttons */
-    .btn + .btn {
-      margin-top: 1rem; /* Adjust the spacing as needed */
     }
 
     /* Progress Bar */
@@ -190,45 +150,15 @@
       opacity: 1;
       transform: translateY(0);
     }
-
-    @media (max-width: 768px) {
-      .card {
-        padding: 2rem 1.5rem;
-      }
-
-      h1 {
-        font-size: 1.25rem;
-      }
-
-      .field input,
-      .field select {
-        font-size: 0.85rem;
-      }
-
-      .btn {
-        font-size: 0.9rem;
-        padding: 0.8rem 1rem;
-      }
-    }
   </style>
 </head>
 <body>
   <main class="card">
-    <h1><i data-lucide="upload-cloud"></i> Upload Tenant Asset</h1>
-    <form id="uploadForm" method="post" enctype="multipart/form-data" action="/admin/{{ tenant_id }}/upload" novalidate>
-      <div class="field">
-        <label for="apiKey">API Key <span data-lucide="key"></span></label>
-        <input type="password" id="apiKey" name="api_key" placeholder="Enter API key" required />
-      </div>
-
-      <div class="field">
-        <label for="tenantDropdown">Tenant <span data-lucide="building"></span></label>
-        <select id="tenantDropdown" name="tenant_id" required></select>
-      </div>
-
+    <h1><i data-lucide="upload-cloud"></i> Upload Configuration</h1>
+    <form id="uploadForm" method="post" enctype="multipart/form-data" action="/admin/upload" novalidate>
       <div class="field">
         <label for="assetType">Asset Type <span data-lucide="layers"></span></label>
-        <select id="assetType" name="asset_type" required>
+        <select id="assetType" name="file_type" required>
           <option value="catalog">Catalog</option>
           <option value="tone">Tone</option>
           <option value="fallback_responses">Fallback Responses</option>
@@ -244,7 +174,6 @@
       <div class="progress" id="progressBar"><span id="progressFill"></span></div>
 
       <button class="btn" type="submit"><i data-lucide="rocket"></i> Upload</button>
-      <button class="btn" type="button" id="saveButton"><i data-lucide="save"></i> Save</button>
       <div class="success" id="successMessage"><i data-lucide="check-circle"></i> Upload successful!</div>
     </form>
   </main>
@@ -254,78 +183,13 @@
       if (window.lucide) lucide.createIcons();
     });
 
-    const tenantDropdown = document.getElementById('tenantDropdown');
-    tenantDropdown.innerHTML = '<option>Loading tenants...</option>';
-    fetch('/tenants/tenant_map.json') // Updated URL
-      .then((res) => res.json())
-      .then((data) => {
-        tenantDropdown.innerHTML = ''; // Clear loading message
-        Object.entries(data).forEach(([number, info]) => {
-          const opt = document.createElement('option');
-          opt.value = info.tenant_id;
-          opt.textContent = `${info.tenant_id} (${number})`;
-          tenantDropdown.appendChild(opt);
-        });
-      })
-      .catch(() => {
-        tenantDropdown.innerHTML = '<option>⚠️ Unable to load tenants</option>';
-        tenantDropdown.disabled = true;
-      });
-
-    const apiKeyInput = document.getElementById('apiKey');
-    const assetTypeInput = document.getElementById('assetType');
-    const fileInput = document.getElementById('fileInput');
-    const saveButton = document.getElementById('saveButton');
-    const successMessage = document.getElementById('successMessage');
-    const KEY_STORAGE = 'grace_api_key';
-    const KEY_EXP_STORAGE = 'grace_api_key_exp';
-    const EXPIRY_HOURS = 24;
-
-    const saveKey = (key) => {
-      sessionStorage.setItem(KEY_STORAGE, key);
-      sessionStorage.setItem(KEY_EXP_STORAGE, Date.now() + EXPIRY_HOURS * 60 * 60 * 1000);
-    };
-
-    const loadKey = () => {
-      const key = sessionStorage.getItem(KEY_STORAGE);
-      const exp = sessionStorage.getItem(KEY_EXP_STORAGE);
-      if (key && exp && Date.now() < parseInt(exp, 10)) return key;
-      sessionStorage.removeItem(KEY_STORAGE);
-      sessionStorage.removeItem(KEY_EXP_STORAGE);
-      return '';
-    };
-
-    apiKeyInput.value = loadKey();
-    apiKeyInput.addEventListener('blur', () => saveKey(apiKeyInput.value.trim()));
-
-    // Save form state locally
-    saveButton.addEventListener('click', () => {
-      const formState = {
-        apiKey: apiKeyInput.value,
-        assetType: assetTypeInput.value,
-      };
-      localStorage.setItem('formState', JSON.stringify(formState));
-      alert('Form state saved locally!');
-    });
-
-    // Load form state on page load
-    const savedState = JSON.parse(localStorage.getItem('formState'));
-    if (savedState) {
-      apiKeyInput.value = savedState.apiKey || '';
-      assetTypeInput.value = savedState.assetType || '';
-    }
-
     const form = document.getElementById('uploadForm');
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
+    const successMessage = document.getElementById('successMessage');
 
     form.addEventListener('submit', (e) => {
-      if (!apiKeyInput.value.trim()) {
-        alert('❌ API key is required.');
-        e.preventDefault();
-        return;
-      }
-
+      const fileInput = document.getElementById('fileInput');
       const file = fileInput.files[0];
       if (file && file.type !== 'application/json') {
         alert('❌ Only JSON files are allowed.');
@@ -339,11 +203,9 @@
       progressBar.classList.add('active');
 
       const formData = new FormData(form);
-      const tenantId = formData.get('tenant_id');
 
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/admin/${tenantId}/upload`, true); // Ensure this matches the FastAPI route
-      xhr.setRequestHeader('X-API-KEY', formData.get('api_key'));
+      xhr.open('POST', '/admin/upload', true);
 
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
@@ -359,13 +221,8 @@
           successMessage.innerHTML = `<i data-lucide="check-circle"></i> Upload successful! (${new Date().toLocaleTimeString()})`;
           successMessage.classList.add('show');
           form.reset();
-          apiKeyInput.value = loadKey();
           lucide.createIcons();
           setTimeout(() => successMessage.classList.remove('show'), 6000);
-        } else if (xhr.status === 403) {
-          alert('❌ Unauthorized: Invalid API key.');
-        } else if (xhr.status === 400) {
-          alert('❌ Bad Request: Please check your input.');
         } else {
           alert(`❌ Upload failed (${xhr.status}): ${xhr.responseText}`);
         }
@@ -381,4 +238,3 @@
   </script>
 </body>
 </html>
-``` 

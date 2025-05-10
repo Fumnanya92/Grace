@@ -10,9 +10,15 @@ from logging_config import configure_logger
 
 logger = configure_logger("utils")
 
-TENANT_MAP_PATH = Path("tenant_map.json")
-DEFAULT_TENANT_ID = "default"
-TENANTS_DIR = Path("tenants")
+CONFIG_DIR = Path("config")  # Centralized configuration directory
+CONFIG_FILES = {
+    "speech_library": CONFIG_DIR / "speech_library.json",
+    "catalog": CONFIG_DIR / "catalog.json",
+    "config": CONFIG_DIR / "config.json",
+    "fallback_responses": CONFIG_DIR / "fallback_responses.json"
+}
+
+SPEECH_LIBRARY_FILE = os.path.join(CONFIG_DIR, "speech_library.json")
 
 async def detect_picture_request(message: str) -> bool:
     """Detect if user is asking to see pictures/designs."""
@@ -36,73 +42,55 @@ async def cached_list_images():
         raise
 
 
-def get_tenant_id_from_sender(sender: str) -> str:
-    tenant_map = get_tenant_map()
-    for tenant_id, tenant_info in tenant_map.items():
-        if sender.replace("whatsapp:", "") in tenant_info.get("platforms", []):
-            return tenant_id
-    return None
+def ensure_config_structure():
+    """Ensure the centralized configuration folder structure exists."""
+    if not CONFIG_DIR.exists():
+        logger.warning(f"Configuration directory '{CONFIG_DIR}' not found. Creating it.")
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_tenant_map() -> dict:
-    """Load tenant map from JSON file."""
-    map_path = os.path.join("tenants", "tenant_map.json")
+def load_config_file(file_key: str) -> dict:
+    """Load a configuration file from the centralized config directory."""
+    ensure_config_structure()
+    file_path = CONFIG_FILES.get(file_key)
+    if not file_path:
+        logger.error(f"Invalid configuration file key: {file_key}")
+        return {}
+
     try:
-        if os.path.exists(map_path):
-            with open(map_path) as f:
-                return json.load(f)
-        logger.warning("tenant_map.json not found. Returning empty map.")
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to load tenant_map.json: {e}")
-    return {}
-
-
-def get_speech_library_path(tenant_id: str) -> Path:
-    """Builds the speech library path for a tenant."""
-    return TENANTS_DIR / tenant_id / "speech_library.json"
-
-
-def ensure_tenant_structure(tenant_id: str):
-    """Ensure the tenant folder structure exists."""
-    tenant_dir = TENANTS_DIR / tenant_id
-    if not tenant_dir.exists():
-        logger.warning(f"Tenant directory '{tenant_dir}' not found. Creating it.")
-        tenant_dir.mkdir(parents=True, exist_ok=True)
-
-
-def load_speech_library(tenant_id: str) -> dict:
-    """Load the speech library for a specific tenant."""
-    path = get_speech_library_path(tenant_id)
-    try:
-        if not path.exists():
-            logger.warning(f"[{tenant_id}] No speech_library.json found. Returning empty structure.")
-            return {"training_data": []}
-        with path.open("r", encoding="utf-8") as f:
+        if not file_path.exists():
+            logger.warning(f"Configuration file '{file_path}' not found. Returning empty structure.")
+            return {}
+        with file_path.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger.error(f"[{tenant_id}] Failed to load speech library: {e}")
-        return {"training_data": []}
+        logger.error(f"Failed to load configuration file '{file_path}': {e}")
+        return {}
 
 
-def save_speech_library(tenant_id: str, data: dict) -> None:
-    """Save the speech library for a specific tenant."""
-    ensure_tenant_structure(tenant_id)
-    path = get_speech_library_path(tenant_id)
-    try:
-        with path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        logger.info(f"[{tenant_id}] Speech library saved successfully.")
-    except Exception as e:
-        logger.error(f"[{tenant_id}] Failed to save speech library: {e}")
-
-
-def update_speech_library(tenant_id: str, intent: str, phrase: str, response: str, confidence: float = 1.0):
-    """Update the tenant’s speech library with new intent-response training data."""
-    if not intent or not phrase or not response:
-        logger.warning(f"[{tenant_id}] Skipping update due to missing values.")
+def save_config_file(file_key: str, data: dict) -> None:
+    """Save a configuration file to the centralized config directory."""
+    ensure_config_structure()
+    file_path = CONFIG_FILES.get(file_key)
+    if not file_path:
+        logger.error(f"Invalid configuration file key: {file_key}")
         return
 
-    lib = load_speech_library(tenant_id)
+    try:
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        logger.info(f"Configuration file '{file_path}' saved successfully.")
+    except Exception as e:
+        logger.error(f"Failed to save configuration file '{file_path}': {e}")
+
+
+def update_speech_library(intent: str, phrase: str, response: str, confidence: float = 1.0):
+    """Update the speech library with new intent-response training data."""
+    if not intent or not phrase or not response:
+        logger.warning("Skipping update due to missing values.")
+        return
+
+    lib = load_config_file("speech_library")
 
     if "training_data" not in lib:
         lib["training_data"] = []
@@ -117,9 +105,22 @@ def update_speech_library(tenant_id: str, intent: str, phrase: str, response: st
         # Sort the training data for better readability
         lib["training_data"].sort(key=lambda x: x["intent"])
         try:
-            save_speech_library(tenant_id, lib)
+            save_config_file("speech_library", lib)
         except PermissionError as e:
-            logger.error(f"[{tenant_id}] Permission denied while saving speech library: {e}")
-        logger.info(f"[{tenant_id}] Added intent '{intent}' with phrase '{phrase}'")
+            logger.error(f"Permission denied while saving speech library: {e}")
+        logger.info(f"Added intent '{intent}' with phrase '{phrase}'")
     else:
-        logger.info(f"[{tenant_id}] Duplicate phrase-intent pair skipped.")
+        logger.info(f"Duplicate phrase-intent pair skipped.")
+
+
+def load_speech_library() -> dict:
+    """Load the speech library from the centralized configuration directory."""
+    try:
+        with open(SPEECH_LIBRARY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Speech library file '{SPEECH_LIBRARY_FILE}' not found. Returning empty library.")
+        return {"intents": {}, "responses": {}}
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding speech library JSON: {e}")
+        return {"intents": {}, "responses": {}}

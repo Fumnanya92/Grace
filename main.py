@@ -16,14 +16,13 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 from pydantic import BaseModel
-from tenant_uploads import router as tenant_upload_router
-from admin.routes import router as admin_router
+from pathlib import Path
 
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
 from modules.s3_service import S3Service
 from modules.image_processing_module import ImageProcessor
-from modules.utils import detect_picture_request, cached_list_images, get_tenant_map
+from modules.utils import detect_picture_request, cached_list_images
 from modules.bot_responses import BotResponses
 from config import config
 from logging_config import configure_logger
@@ -33,16 +32,16 @@ from init_db import init_db
 logger = configure_logger("main")
 logger.info("Main module initialized.")
 
+# Load environment variables
 load_dotenv()
-conf.get_default().auth_token = os.getenv("NGROK_AUTH_TOKEN")
+conf.get_default().auth_token = config.APP["ngrok_auth_token"]
 
-TENANTS_DIR = "tenants"
+# Initialize services
 payment_handler = PaymentHandler()
 s3_service = S3Service()
 image_processor = ImageProcessor(s3_service)
 
-if config.APP['debug']:
-    print("Running in debug mode")
+if config.APP["debug"]:
     logger.info("Debug mode enabled")
 
 class PaymentVerification(BaseModel):
@@ -57,17 +56,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Serve the tenants directory as static files
-app.mount("/tenants", StaticFiles(directory="tenants"), name="tenants")
+# Define the base directory and config directory
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_DIR = BASE_DIR / "config"
 
-# Include the tenant uploads router
-app.include_router(tenant_upload_router)
+# Ensure the 'config' directory exists
+CONFIG_DIR.mkdir(exist_ok=True)  # Safely create the directory if it doesn't exist
 
-# Include the admin router
-app.include_router(admin_router)
+# Mount the 'config' directory as static files
+app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
 
 async def startup():
     logger.info("Starting Grace...")
+
+    # Ensure required files exist in the config directory
+    ensure_required_files()
+
     asyncio.create_task(refresh_cached_images())
     await start_ngrok()
     init_db()
@@ -78,13 +82,11 @@ async def shutdown():
 
 async def start_ngrok():
     try:
-        public_url = ngrok.connect(8000).public_url
+        public_url = ngrok.connect(config.APP["port"]).public_url
         logger.info(f"Ngrok public URL: {public_url}")
         print(f"\n{'='*50}\nServer running at: {public_url}\nTwilio Webhook URL: {public_url}/webhook\n{'='*50}\n")
     except Exception as e:
         logger.error(f"Error starting Ngrok: {e}")
-
-
 
 @app.post("/webhook")
 async def handle_webhook(
@@ -94,23 +96,19 @@ async def handle_webhook(
     MediaUrl0: Optional[str] = Form(None),
     MediaContentType0: Optional[str] = Form(None)
 ):
-    twilio_resp = MessagingResponse()
     sender = From
     message = Body.strip()
     media_url = MediaUrl0
     media_type = MediaContentType0
     logger.info(f"Sender: {sender}")
 
-    # Identify tenant (default to single tenant if multi-tenancy is not enabled)
-    tenant_id = "default"
-    logger.info(f"Using default tenant configuration for sender: {sender}")
-
-    responses = BotResponses(tenant_id)
+    responses = BotResponses()
 
     try:
+        # Build conversation history
         conversation_history = await build_conversation_history(sender)
-        user = UserMemory(sender)
 
+        # Process the message or media
         if media_url:
             bot_reply = await responses.handle_media_message(sender, media_url, media_type)
         elif message:
@@ -118,24 +116,21 @@ async def handle_webhook(
         else:
             bot_reply = "Please send a message or an image."
 
-        if isinstance(bot_reply, list):
-            bot_reply = "\n".join(bot_reply)
-
+        twilio_resp = MessagingResponse()
         twilio_resp.message(bot_reply)
         await log_chat(sender, message, bot_reply)
         return Response(content=str(twilio_resp), media_type="application/xml")
 
     except Exception as e:
-        logger.error(f"Webhook error for {sender}: {e}", exc_info=True)
-        twilio_resp.message("Sorry, something went wrong. Please try again later.")
-        return Response(content=str(twilio_resp), media_type="application/xml")
+        logger.error(f"Webhook error for sender '{sender}': {e}", exc_info=True)
+        return Response(content="Sorry, something went wrong.", media_type="application/xml")
 
 @app.post("/verify-payment")
 async def verify_payment(verification: PaymentVerification):
     try:
         logger.debug(f"Payment verification request: {verification.dict()}")
         result = await asyncio.to_thread(payment_handler.verify_payment, verification.code)
-        if result['status'] == "success":
+        if result["status"] == "success":
             logger.info(f"Payment verified: {verification.code}")
             return result
         raise HTTPException(status_code=404, detail=result)
@@ -143,33 +138,27 @@ async def verify_payment(verification: PaymentVerification):
         logger.error(f"Payment verification error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/upload_catalog")
-async def upload_catalog(
-    tenant_id: str = Form(...),
-    file: UploadFile = File(...)
-):
-    if not isinstance(tenant_id, str):
-        raise TypeError(f"Expected tenant_id to be str, got {type(tenant_id)}")
+@app.post("/admin/upload")
+async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
+    filename_map = {
+        "catalog": "catalog.json",
+        "config": "config.json",
+        "speech_library": "speech_library.json",
+        "fallback_responses": "fallback_responses.json"
+    }
 
-    tenant_path = os.path.join(TENANTS_DIR, tenant_id)
-    os.makedirs(tenant_path, exist_ok=True)
-    catalog_path = os.path.join(tenant_path, "catalog.json")
+    if file_type not in filename_map:
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    file_path = os.path.join("config", filename_map[file_type])
 
     try:
-        with open(catalog_path, "wb") as buffer:
+        with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-
-        with open(catalog_path, "r") as f:
-            json.load(f)
-
-        return JSONResponse(content={"message": f"Catalog uploaded for {tenant_id}"}, status_code=200)
-
-    except json.JSONDecodeError:
-        os.remove(catalog_path)
-        raise HTTPException(status_code=400, detail="Uploaded file is not valid JSON")
-
+        return {"message": f"{file_type} uploaded successfully."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error uploading file '{file_type}': {e}")
+        raise HTTPException(status_code=500, detail="File upload failed")
 
 @app.get("/health")
 async def health_check():
@@ -231,9 +220,25 @@ async def refresh_cached_images():
         logger.info("Refreshed cached product images")
         await asyncio.sleep(300)
 
+def ensure_config_directory():
+    """Ensure the 'config' directory exists."""
+    if not os.path.exists("config"):
+        os.makedirs("config")
+        logger.info("Created 'config' directory.")
+
+def ensure_required_files():
+    """Ensure required configuration files exist in the 'config' directory."""
+    required_files = ["config.json", "catalog.json", "speech_library.json", "fallback_responses.json"]
+    for file in required_files:
+        file_path = os.path.join("config", file)
+        if not os.path.exists(file_path):
+            with open(file_path, "w") as f:
+                f.write("{}")  # Create an empty JSON file
+            logger.warning(f"Created placeholder for missing file: {file}")
+
 @lru_cache(maxsize=1)
 async def cached_health_check():
     return await health_check()
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=config.APP['debug'])
+    uvicorn.run("main:app", host="0.0.0.0", port=config.APP["port"], reload=config.APP["debug"])

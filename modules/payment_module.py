@@ -11,7 +11,9 @@ from config import config
 class PaymentHandler:
     def __init__(self, db_path: str = 'memory.db'):
         """Initialize with an async database connection."""
-        self.twilio_client = Client(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)
+        # Access Twilio credentials from the centralized config
+        self.twilio_client = Client(config.TWILIO['account_sid'], config.TWILIO['auth_token'])
+        self.whatsapp_number = config.TWILIO['whatsapp_number']
         self.db_path = db_path
 
         if not os.path.exists(self.db_path):
@@ -153,7 +155,7 @@ class PaymentHandler:
             
             await self.twilio_client.messages.create(
                 body=message,
-                from_=config.WHATSAPP_NUMBER,
+                from_=self.whatsapp_number,
                 to=config.BUSINESS_RULES['accountant_contact']
             )
             logging.info(f"Alert sent to accountant for sender: {sender}, verification code: {verification_code}")
@@ -168,7 +170,7 @@ class PaymentHandler:
             
             await self.twilio_client.messages.create(
                 body=message,
-                from_=config.WHATSAPP_NUMBER,
+                from_=self.whatsapp_number,
                 to=sender
             )
         except Exception as e:

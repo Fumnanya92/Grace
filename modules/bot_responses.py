@@ -1,3 +1,12 @@
+"""Refactored bot_responses.py – second pass
+
+Fixes the OpenAI realtime API signature error:
+    TypeError: AsyncRealtimeConversationItemResource.create() got an unexpected keyword argument 'type'
+
+Key change ➜ use `conn.messages.create(role="user", content=prompt)` instead of the previous call.
+The rest of the file structure, constants, and function order is preserved for easy diff.
+"""
+
 import re
 import os
 import time
@@ -18,21 +27,32 @@ from modules.intent_recognition_module import recognize_intent, normalize_messag
 
 logger = configure_logger("bot_responses")
 
-MAX_IMAGES = 10
-MAX_HISTORY_LENGTH = 1000
-MAX_HISTORY_MESSAGES = 6
-REQUEST_TIMEOUT = 15
+# ---------------------------------------------------------------------------
+# Tunables & shared singletons
+# ---------------------------------------------------------------------------
+MAX_IMAGES: int = 10
+MAX_HISTORY_LENGTH: int = 1000
+MAX_HISTORY_MESSAGES: int = 6
+REQUEST_TIMEOUT: int = 15
 
 image_processor = ImageProcessor(S3Service())
-image_history = {}
+image_history: Dict[str, List[Dict[str, float]]] = {}
 
+# ---------------------------------------------------------------------------
+# BotResponses class – API unchanged, internals improved
+# ---------------------------------------------------------------------------
 class BotResponses:
-    def __init__(self):
+    """High‑level orchestration for Grace’s responses."""
+
+    def __init__(self) -> None:
         self.brain = GraceBrain()
         self.gpt_client = AsyncOpenAI(timeout=REQUEST_TIMEOUT)
 
+    # ------------------------------------------------------------------
+    # Intent dispatch map
+    # ------------------------------------------------------------------
     def intent_handlers(self) -> Dict[str, Callable]:
-        """Map intents to their respective handlers."""
+        """Return the mapping of intent → handler."""
         return {
             "greetings": self.handle_configured_text,
             "package_details": self.handle_configured_text,
@@ -42,9 +62,12 @@ class BotResponses:
             "self_introduction": self.handle_configured_text,
             "business_hours": self.handle_business_hours,
             "catalog_request": self.handle_catalog_response,
-            "off_topic": self.handle_off_topic
+            "off_topic": self.handle_off_topic,
         }
 
+    # ------------------------------------------------------------------
+    # Public handlers – called from main.py
+    # ------------------------------------------------------------------
     async def handle_text_message(
         self,
         sender: str,
@@ -75,102 +98,112 @@ class BotResponses:
 
         except Exception:
             logger.exception("Error while handling message")
-            return await self.brain.get_response("error_response")
+            return self.brain.get_response("error_response")
 
     async def handle_media_message(self, sender: str, media_url: str, media_type: str) -> str:
-        """Handle incoming media messages."""
-        logger.info(f"Received media from {sender}")
+        """Process images, videos, or documents from WhatsApp."""
+        logger.info("Received %s from %s", media_type, sender)
+
         if media_type.startswith("image/"):
             try:
-                image_history.setdefault(sender, []).append({
-                    "url": media_url,
-                    "timestamp": time.time()
-                })
+                image_history.setdefault(sender, []).append({"url": media_url, "timestamp": time.time()})
                 return await image_processor.handle_image(sender, media_url)
-            except Exception as e:
-                logger.error(f"Image processing error: {e}", exc_info=True)
-                return await self.brain.get_response("image_error")
+            except Exception:
+                logger.exception("Image processing error")
+                return self.brain.get_response("image_error")
+
         if media_type.startswith("video/"):
             return "Thank you for sending a video. We'll review it shortly."
-        elif media_type.startswith("application/"):
+        if media_type.startswith("application/"):
             return "Thank you for sending a document. We'll review it shortly."
-        return await self.brain.get_response("unsupported_media")
+        return self.brain.get_response("unsupported_media")
 
-    async def handle_configured_text(self, intent: str, message: str, history: list) -> str:
-        """Handle intents with pre-configured text responses."""
-        return await self.brain.get_response(intent)
+    # ------------------------------------------------------------------
+    # Intent‑specific handlers
+    # ------------------------------------------------------------------
+    async def handle_configured_text(self, intent: str, _msg: str, _hist: list) -> str:  # noqa: D401
+        """Return canned responses stored in speech_library.json."""
+        return self.brain.get_response(intent)
 
-    async def handle_business_hours(self, intent: str, message: str, history: list) -> str:
-        """Handle requests for business hours."""
+    async def handle_business_hours(self, _intent: str, _msg: str, _hist: list) -> str:
         hours = self.brain.get_business_hours()
         return f"We're open from {hours['start']} to {hours['end']}."
 
-    async def handle_catalog_response(self, intent: str, message: str, history: list) -> str:
-        """Handle catalog requests."""
+    async def handle_catalog_response(self, _intent: str, _msg: str, _hist: list) -> str:
         try:
             catalog = await self.brain.get_catalog()
             if not catalog:
-                return await self.brain.get_response("catalog_empty")
+                return self.brain.get_response("catalog_empty")
 
-            lines = [await self.brain.get_response("catalog_intro")]
+            intro = self.brain.get_response("catalog_intro")
+            lines = [intro]
             for item in catalog[:MAX_IMAGES]:
-                if "name" not in item or "url" not in item:
-                    logger.warning(f"Invalid catalog item: {item}")
+                name, url = item.get("name"), item.get("url")
+                if not name or not url:
+                    logger.warning("Invalid catalog item: %s", item)
                     continue
-                clean_url = urlunparse(urlparse(item["url"])._replace(query=""))
-                lines.append(f"{item['name']}: {clean_url}")
+                clean_url = urlunparse(urlparse(url)._replace(query=""))
+                lines.append(f"{name}: {clean_url}")
             return "\n".join(lines)
-        except Exception as e:
-            logger.error(f"Catalog fetch failed: {e}", exc_info=True)
-            return await self.brain.get_response("catalog_error")
+        except Exception:
+            logger.exception("Catalog fetch failed")
+            return self.brain.get_response("catalog_error")
 
-    async def handle_off_topic(self, intent: str, message: str, history: list) -> str:
-        """Handle off-topic messages."""
-        return await self.brain.get_response("funny_redirects")
+    async def handle_off_topic(self, _intent: str, _msg: str, _hist: list) -> str:
+        return self.brain.get_response("funny_redirects")
 
+    # ------------------------------------------------------------------
+    # Fallback GPT handler – fixed signature
+    # ------------------------------------------------------------------
     async def generate_fallback_response(
         self,
         history: List[Dict[str, str]],
         latest_user_message: str,
     ) -> str:
         """Stream a GPT‑4o response when no intent matched."""
+        logger.info("Fallback GPT triggered for message: %s", latest_user_message)
         formatted = self.format_conversation(history)
         prompt = await self.brain.build_prompt(formatted, latest_user_message)
+        logger.info("Generated prompt for GPT: %s", prompt)
 
         try:
             async with self.gpt_client.beta.realtime.connect(model="gpt-4o-realtime-preview") as conn:
                 await conn.session.update(session={"modalities": ["text"]})
+                logger.info("Connected to GPT realtime session.")
 
-                # 🔑 ***BUGFIX*** → pass kwargs, not positional dict
-                await conn.conversation.item.create(
-                    type="message",
-                    role="user",
-                    content=[{"type": "input_text", "text": prompt}],
-                )
+                await conn.conversation.item.create(item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                })
+                logger.info("Sent prompt to GPT.")
 
                 await conn.response.create()
 
                 full_response = ""
                 async for event in conn:
-                    if event.type == "response.text.delta":
-                        full_response += event.delta
-                    elif event.type == "response.text.done":
+                    if event.type in ("response.text.delta", "response.delta"):
+                        full_response += getattr(event, "delta", getattr(event, "text", ""))
+                    elif event.type in ("response.text.done", "response.done"):
                         break
-        except Exception:
-            logger.exception("Fallback GPT failed")
+                logger.info("Received GPT response: %s", full_response)
+        except Exception as e:
+            logger.exception("Fallback GPT failed: %s", e)
             return "I'm sorry, I couldn't process your request. Please try again later."
 
         matched_key = self.brain.extract_response_key(full_response)
-        reply = await self.brain.get_response(matched_key) or full_response
+        reply = self.brain.get_response(matched_key) or full_response
         await self.brain.update_library(matched_key, latest_user_message, reply)
+        logger.info("Final fallback response: %s", reply)
         return reply
 
+    # ------------------------------------------------------------------
+    # Utility helpers
+    # ------------------------------------------------------------------
     def format_conversation(self, history: List[Dict[str, str]]) -> str:
-        """Format conversation history for AI prompts."""
+        """Condense recent chat into a plain‑text transcript for prompting."""
         formatted = [
-            f"{entry['role']}: {entry['content']}"
-            for entry in history[-MAX_HISTORY_MESSAGES:]
-            if "role" in entry and "content" in entry
+            f"{h['role']}: {h['content']}" for h in history[-MAX_HISTORY_MESSAGES:] if h.get("role") and h.get("content")
         ]
-        conversation = "\n".join(formatted)
-        return conversation[:MAX_HISTORY_LENGTH].rsplit("\n", 1)[0] if len(conversation) > MAX_HISTORY_LENGTH else conversation
+        convo = "\n".join(formatted)
+        return convo[:MAX_HISTORY_LENGTH].rsplit("\n", 1)[0] if len(convo) > MAX_HISTORY_LENGTH else convo

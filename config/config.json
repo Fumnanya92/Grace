@@ -1,1 +1,35 @@
-{}
+{
+    "whatsapp_number": "+2347082229034",
+    "business_id": "akanrabyatuche",
+    "business_type": "ecommerce",
+    "default_language": "en",
+    "business_name": "AkanrabyAtuche",
+    "currency": "NGN",
+    "delivery_time_days": 10,
+    "minimum_order": 4,
+    "payment_policy": "50% upfront, 50% on delivery",
+    "business_hours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "instagram": "https://instagram.com/atuchewoman",
+    "shop_link": "https://atuchewoman.com/shop",
+    "payment_details": {
+      "bank_name": "GTBank",
+      "account_number": "0123456789",
+      "account_name": "Atuche Empire"
+    },
+    "timezone": "Africa/Lagos",
+    "intent_keys": [
+      "greetings",
+      "ask_for_designs",
+      "package_details",
+      "deposit_instructions",
+      "payment_confirmed",
+      "selection_confirmation",
+      "funny_redirects",
+      "self_introduction"
+    ],
+    "catalog_enabled": true
+  }
+  

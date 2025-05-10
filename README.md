@@ -64,13 +64,13 @@ Let me know if you'd like this formatted into a document, turned into a README, 
 
 ## Executive Summary
 
-Grace is envisioned as a fully autonomous, AI-powered sales assistant that operates over WhatsApp. It will serve small businesses, helping them manage customer inquiries, showcase products, close sales, and follow up seamlessly—all through natural, human-like conversations. This proposal merges business goals and architectural insights to define a scalable product strategy.
+Grace is envisioned as a fully autonomous, AI-powered sales assistant that operates over WhatsApp, instagram etc. It will serve small businesses, helping them manage customer inquiries, showcase products, close sales, and follow up seamlessly—all through natural, human-like conversations. This proposal merges business goals and architectural insights to define a scalable product strategy.
 
 ---
 
 ## 1. Vision & Market Fit
 
-Many small businesses rely on WhatsApp to manage customer interactions, but struggle with response delays, inconsistency, and burnout. Grace is designed to:
+Many small businesses rely on WhatsApp, instagram and other social media dm to manage customer interactions, but struggle with response delays, inconsistency, and burnout. Grace is designed to:
 
 * Handle all customer inquiries and guide users through sales funnels.
 * Learn and adapt from interactions with minimal human intervention.
@@ -101,8 +101,42 @@ Grace will be offered as a SaaS product with support for multiple businesses (mu
 
 ### D. Plug-and-Play for Any Business
 
-* Each business configures Grace via a dashboard (catalog uploads, tone customization, pricing updates).
-* Custom responses, workflows, and product details per business.
+### D. Custom Responses, Workflows, and Product Details per Business
+
+Grace is designed to adapt to the unique needs of each business by leveraging custom configurations. Businesses can provide Grace with the following details to ensure seamless customer interactions:
+
+1. **Product Details**  
+  - Upload product catalogs, including descriptions, pricing, and availability.
+  - Include images or links to product visuals for enhanced customer experience.
+
+2. **Company Information**  
+  - Provide a brief about the company, including its mission, values, and unique selling points.
+  - Add business hours and contact details for customer inquiries.
+
+3. **Return Policies**  
+  - Define clear return and refund policies to address customer concerns.
+  - Include conditions, timelines, and steps for initiating returns.
+
+4. **Payment and Account Details**  
+  - Share payment methods, bank account details, or links to payment gateways.
+  - Specify deposit requirements or installment options, if applicable.
+
+5. **Sales and Promotions**  
+  - Highlight ongoing discounts, seasonal sales, or promotional offers.
+  - Include coupon codes or special deals for loyal customers.
+
+6. **FAQs and Common Queries**  
+  - Provide answers to frequently asked questions, such as shipping timelines, customization options, or fabric care instructions.
+
+### AI-Driven Intent Recognition and Continuous Learning
+
+Grace uses AI to identify customer intent and respond with the appropriate information provided by the business. Key features include:
+
+- **Intent Recognition**: Grace analyzes customer messages to determine their intent (e.g., product inquiry, payment confirmation, return request) and responds accordingly.
+- **Dynamic Speech Library Updates**: Grace updates its speech library with new responses based on customer interactions, ensuring continuous learning and improved accuracy.
+- **Personalized Responses**: By leveraging the provided business details, Grace crafts responses that align with the brand's tone and values.
+
+This approach ensures that Grace not only meets customer needs efficiently but also evolves over time to provide an increasingly personalized and effective sales experience.
 
 ---
 

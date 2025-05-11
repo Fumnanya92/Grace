@@ -18,6 +18,7 @@ from urllib.parse import urlparse, urlunparse
 from openai import AsyncOpenAI
 from config import config
 from logging_config import configure_logger
+from modules.langchain_agent import GraceAgent
 
 from modules.grace_brain import GraceBrain
 from modules.utils import detect_picture_request
@@ -74,30 +75,43 @@ class BotResponses:
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
-        """Process a plain‑text WhatsApp message."""
+        """Full AI-driven message handling using LangChain."""
         conversation_history = conversation_history or []
-        logger.info("Handling message from %s: %s", sender, message)
+        logger.info(f"Grace AI handling message from {sender}: {message}")
 
         try:
-            message = normalize_message(message)
+            # Format conversation history for GPT prompt
+            formatted_history = self.format_conversation(conversation_history)
+            logger.info(f"Formatted conversation history: {formatted_history}")
 
-            # Quick check: picture request → shortcut to catalog
-            if await detect_picture_request(message):
-                return await self.handle_catalog_response("catalog_request", message, conversation_history)
+            # Build the prompt (await the coroutine)
+            prompt = await self.brain.build_prompt(formatted_history, message)
+            logger.info(f"Generated prompt: {prompt}")
 
-            # Route by recognized intents
-            for intent in recognize_intent(message):
-                handler = self.intent_handlers().get(intent)
-                if handler:
-                    response = await handler(intent, message, conversation_history)
-                    if response:
-                        return response
+            # Run LangChain pipeline
+            response = await GraceAgent.ainvoke(prompt)
 
-            # Nothing matched → fallback to GPT
-            return await self.generate_fallback_response(conversation_history, message)
+            # Validate response
+            if not response or not response.content.strip():
+                logger.warning("Empty response from LangChain pipeline.")
+                return self.brain.get_response("error_response")
 
-        except Exception:
-            logger.exception("Error while handling message")
+            # Process LangChain response
+            response_text = response.content.strip()
+            logger.info(f"LangChain response: {response_text}")
+
+            # Extract [[tag]] and clean response
+            tag = self.brain.extract_response_key(response_text) or "unknown"
+            cleaned = re.sub(r"\[\[.*?\]\]", "", response_text).strip()
+
+            # Log and update learned response
+            await self.brain.update_library(tag, message, cleaned)
+            logger.info(f"Learned response for tag '{tag}': {cleaned}")
+
+            return cleaned
+
+        except Exception as e:
+            logger.error("LangChain error: %s", e, exc_info=True)
             return self.brain.get_response("error_response")
 
     async def handle_media_message(self, sender: str, media_url: str, media_type: str) -> str:
@@ -151,51 +165,6 @@ class BotResponses:
 
     async def handle_off_topic(self, _intent: str, _msg: str, _hist: list) -> str:
         return self.brain.get_response("funny_redirects")
-
-    # ------------------------------------------------------------------
-    # Fallback GPT handler – fixed signature
-    # ------------------------------------------------------------------
-    async def generate_fallback_response(
-        self,
-        history: List[Dict[str, str]],
-        latest_user_message: str,
-    ) -> str:
-        """Stream a GPT‑4o response when no intent matched."""
-        logger.info("Fallback GPT triggered for message: %s", latest_user_message)
-        formatted = self.format_conversation(history)
-        prompt = await self.brain.build_prompt(formatted, latest_user_message)
-        logger.info("Generated prompt for GPT: %s", prompt)
-
-        try:
-            async with self.gpt_client.beta.realtime.connect(model="gpt-4o-realtime-preview") as conn:
-                await conn.session.update(session={"modalities": ["text"]})
-                logger.info("Connected to GPT realtime session.")
-
-                await conn.conversation.item.create(item={
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
-                })
-                logger.info("Sent prompt to GPT.")
-
-                await conn.response.create()
-
-                full_response = ""
-                async for event in conn:
-                    if event.type in ("response.text.delta", "response.delta"):
-                        full_response += getattr(event, "delta", getattr(event, "text", ""))
-                    elif event.type in ("response.text.done", "response.done"):
-                        break
-                logger.info("Received GPT response: %s", full_response)
-        except Exception as e:
-            logger.exception("Fallback GPT failed: %s", e)
-            return "I'm sorry, I couldn't process your request. Please try again later."
-
-        matched_key = self.brain.extract_response_key(full_response)
-        reply = self.brain.get_response(matched_key) or full_response
-        await self.brain.update_library(matched_key, latest_user_message, reply)
-        logger.info("Final fallback response: %s", reply)
-        return reply
 
     # ------------------------------------------------------------------
     # Utility helpers

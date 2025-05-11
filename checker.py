@@ -1,154 +1,144 @@
-# modules/grace_brain.py
+# Re-run after kernel reset to restore environment and perform the async Shopify refactor.
 
-"""
-GraceBrain
-----------
-Central knowledge helper for Grace.
+import httpx
+import time
+import logging
+from typing import List, Dict, Any, Optional
+from bs4 import BeautifulSoup
+from fuzzywuzzy import fuzz
+import os
+from dotenv import load_dotenv
 
-Responsibilities:
-* Serve canned responses from speech_library (training_data format)
-* Provide business/config/tone helpers
-* Build GPT fallback prompts
-* Append new Q&A pairs to speech_library.json at runtime
-"""
+load_dotenv()
 
-from __future__ import annotations
+# Constants
+PRODUCT_CACHE_TTL = 300  # 5 minutes
+SHOPIFY_API_VERSION = "2023-01"
 
-import json
-import re
-from pathlib import Path
-from typing import Dict, List, Optional
+# Environment variables
+SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME", "demo-store")
+SHOPIFY_PASSWORD = os.getenv("SHOPIFY_PASSWORD", "demo-password")
 
-from logging_config import configure_logger
-from modules.utils import (
-    get_canned_response,
-    update_speech_library,
-    INTENT_PHRASES,
-)
+# Globals for caching
+cached_products: List[Dict[str, Any]] = []
+last_product_fetch_time: float = 0
 
-logger = configure_logger("grace_brain")
+# Logger
+logger = logging.getLogger("shopify_async")
 
-# ---------------------------------------------------------------------
-# File paths
-# ---------------------------------------------------------------------
-CONFIG_DIR = Path("config")
-FALLBACKS_FILE = CONFIG_DIR / "fallback_responses.json"
+# Async product fetch
+async def fetch_shopify_products(page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+    url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/{SHOPIFY_API_VERSION}/products.json"
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_PASSWORD,
+        "Content-Type": "application/json",
+    }
 
-
-def _load_json(path: Path, default: Optional[dict] = None) -> dict:
-    """Read JSON file or return *default* if missing/error."""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        logger.warning("%s not found. Using default.", path.name)
-        return default or {}
-    except Exception as exc:
-        logger.error("Failed to load %s: %s", path.name, exc)
-        return default or {}
-
-
-class GraceBrain:
-    def __init__(self) -> None:
-        self.config = _load_json(CONFIG_DIR / "config.json", default={})
-        self.tone = _load_json(CONFIG_DIR / "tone.json", default={"style": "friendly"})
-        self.catalog: List[Dict] = _load_json(CONFIG_DIR / "catalog.json", default=[])
-        self.fallbacks = _load_json(FALLBACKS_FILE, default={"default_response": "I'm still learning 😊"})
-
-    # -----------------------------------------------------------------
-    # ==== Canned Responses ===========================================
-    # -----------------------------------------------------------------
-    def get_response(self, intent: str, **kwargs) -> str:
-        """Return a canned response formatted with kwargs, fallback to backup JSON."""
-        if resp := get_canned_response(intent):
-            return resp.format(**kwargs)
-
-        logger.warning("No response found for intent '%s'", intent)
-        return self.fallbacks.get(intent, self.fallbacks.get("default_response", "[no_reply]"))
-
-    # -----------------------------------------------------------------
-    # ==== Config Accessors ===========================================
-    # -----------------------------------------------------------------
-    def get_catalog(self) -> List[Dict]:
-        return self.catalog
-
-    def get_config_value(self, key: str, default=None):
-        return self.config.get(key, default)
-
-    def get_business_hours(self) -> Dict[str, str]:
-        return self.config.get("business_hours", {"start": "09:00", "end": "17:00"})
-
-    def get_payment_details(self) -> Dict[str, str]:
-        return self.config.get("payment_details", {})
-
-    def is_catalog_enabled(self) -> bool:
-        return self.config.get("catalog_enabled", bool(self.catalog))
-
-    def get_business_info(self) -> Dict:
-        return {
-            "name": self.config.get("business_name"),
-            "type": self.config.get("business_type"),
-            "instagram": self.config.get("instagram"),
-            "shop_link": self.config.get("shop_link"),
-            "currency": self.config.get("currency", "₦"),
-            "delivery_time_days": self.config.get("delivery_time_days", 3),
-        }
-
-    # -----------------------------------------------------------------
-    # ==== Intent Helpers =============================================
-    # -----------------------------------------------------------------
-    def intent_keys(self) -> List[str]:
-        """Return every known intent for tagging in prompts."""
-        return sorted(set(INTENT_PHRASES) | set(self.fallbacks))
-
-    def extract_response_key(self, text: str) -> str:
-        """Extract [[intent_key]] tag from GPT reply."""
-        if match := re.search(r"\[\[(.*?)]]", text):
-            return match.group(1).strip()
-        return "default_response"
-
-    # -----------------------------------------------------------------
-    # ==== GPT Prompt Builder =========================================
-    # -----------------------------------------------------------------
-    async def build_prompt(self, chat_history: str, user_message: str) -> str:
-        """
-        Build a rich GPT prompt:
-        - persona/tone
-        - chat history
-        - product teasers
-        - allowed intent tags
-        """
-        persona = self.tone.get(
-            "fallback_persona",
-            "You are Grace, a warm and helpful sales assistant for a small business.",
-        )
-
-        # Handle catalog preview
-        if isinstance(self.catalog, list) and self.catalog:
-            catalog_intro = "\n".join(
-                f"- {item.get('name', 'Unnamed')}: {self.get_business_info()['currency']}{item.get('price', 'N/A')}"
-                for item in self.catalog[:5]
-            )
-        else:
-            logger.warning("Catalog is missing or invalid.")
-            catalog_intro = "Our product list is currently empty."
-
-        keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
-
-        return (
-            f"{persona}\n"
-            f"Recent conversation:\n{chat_history}\n\n"
-            f"User: {user_message}\n\n"
-            f"Product highlights:\n{catalog_intro}\n\n"
-            "Respond conversationally, nudge toward purchase where appropriate, "
-            f"and tag your reply with exactly one of the following keys: {keys}\n"
-        )
-
-    # -----------------------------------------------------------------
-    # ==== AI Learning at Runtime =====================================
-    # -----------------------------------------------------------------
-    async def update_library(self, intent: str, user_phrase: str, ai_response: str) -> None:
-        """Persist new Q&A pair to speech_library and refresh cache."""
+    async with httpx.AsyncClient() as client:
         try:
-            update_speech_library(intent, user_phrase, ai_response, confidence=0.5)
-        except Exception as exc:
-            logger.error("Failed to update speech library: %s", exc)
+            response = await client.get(f"{url}?page={page}&limit={limit}", headers=headers)
+            response.raise_for_status()
+            return response.json().get("products", [])
+        except httpx.HTTPError as e:
+            logger.error(f"Error fetching products from Shopify: {e}")
+            return []
+
+# Async get all products with caching
+async def get_shopify_products(force_refresh: bool = False) -> List[Dict[str, Any]]:
+    global last_product_fetch_time, cached_products
+
+    current_time = time.time()
+    if not force_refresh and current_time - last_product_fetch_time < PRODUCT_CACHE_TTL and cached_products:
+        logger.info("Returning cached Shopify products.")
+        return cached_products
+
+    logger.info("Fetching Shopify products...")
+    products = []
+    page = 1
+
+    while True:
+        page_products = await fetch_shopify_products(page=page)
+        if not page_products:
+            break
+        products.extend(page_products)
+        page += 1
+
+    cached_products = products
+    last_product_fetch_time = current_time
+    logger.info(f"Fetched {len(products)} products from Shopify.")
+    return products
+
+# Fuzzy match
+async def fuzzy_match_product(user_input: str, products: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    user_input = user_input.lower()
+    matches = []
+
+    for product in products:
+        title = product["title"].lower()
+        score = fuzz.token_set_ratio(user_input, title)
+        if score > 70:
+            matches.append((product, score))
+
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches[0][0] if matches else None
+
+# Format response
+def format_product_response(product: Dict[str, Any]) -> str:
+    try:
+        available_stock = product["variants"][0].get("inventory_quantity", 0)
+        price = product["variants"][0].get("price", "N/A")
+        product_link = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/products/{product['handle']}"
+
+        parts = [
+            f"✨ {product['title']} ✨",
+            f"💵 Price: {price}",
+            f"📦 Availability: {'In stock' if available_stock > 0 else 'Out of stock'}",
+            f"{available_stock} units available" if available_stock > 0 else "",
+            f"🔗 View product: {product_link}"
+        ]
+
+        if product.get("body_html"):
+            desc = BeautifulSoup(product["body_html"], "html.parser").get_text()[:200]
+            parts.append(f"📝 Description: {desc}...")
+
+        return "\n".join(filter(None, parts))
+    except Exception as e:
+        logger.error(f"Failed to format product: {e}")
+        return "Sorry, I couldn't fetch the product details."
+
+# Extract name
+def extract_product_name(message: str) -> Optional[str]:
+    import re
+    match = re.search(r"do you (?:have|sell|carry|stock) (.*?)\??$", message, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    match = re.search(r"(?:looking for|want|need) (.*?)[\.\?]?$", message, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    return message.strip()
+
+# Determine if product inquiry
+def is_product_query(message: str) -> bool:
+    keywords = ["have", "stock", "carry", "sell", "available", "product", "item", "dress", "collection"]
+    return any(word in message.lower() for word in keywords)
+
+# Async full product lookup
+async def get_product_details(message: str) -> Optional[str]:
+    if not is_product_query(message):
+        return None
+
+    products = await get_shopify_products()
+    if not products:
+        return "No products found."
+
+    product_name = extract_product_name(message)
+    if not product_name:
+        return "Could not determine which product you meant."
+
+    match = await fuzzy_match_product(product_name, products)
+    if not match:
+        return f"Couldn't find any product similar to '{product_name}'."
+
+    return format_product_response(match)

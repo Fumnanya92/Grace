@@ -22,6 +22,7 @@ class Config:
         self._validate_twilio_config()
         self._validate_aws_config()
         self._validate_openai_config()
+        self._validate_shopify_config()
         self._ensure_database_file()
 
         # Add direct attributes for Twilio credentials
@@ -74,6 +75,13 @@ class Config:
         'temperature': float(os.getenv('OPENAI_TEMPERATURE', '0.7'))
     }
 
+    SHOPIFY: Dict[str, str] = {
+        'api_key': os.getenv('SHOPIFY_API_KEY'),
+        'password': os.getenv('SHOPIFY_PASSWORD'),
+        'store_name': os.getenv('SHOPIFY_STORE_NAME')
+    } # Shopify Configuration
+  
+
     # Application Settings
     APP: Dict[str, Any] = {
         'debug': os.getenv('DEBUG', 'False').lower() == 'true',
@@ -101,6 +109,12 @@ class Config:
             logging.error("OpenAI API key is missing in the environment variables.")
             raise ValueError("OpenAI API key is required.")
 
+    def _validate_shopify_config(self):
+        """Validate Shopify configuration."""
+        if not self.SHOPIFY['api_key'] or not self.SHOPIFY['password'] or not self.SHOPIFY['store_name']:
+            logging.error("Shopify credentials are missing in the environment variables.")
+            raise ValueError("Shopify credentials are required.")
+
     def _ensure_database_file(self):
         """Ensure the database file exists."""
         if not os.path.exists(self.DATABASE['path']):
@@ -115,6 +129,7 @@ class Config:
         logging.debug(f"Database Config: {self.DATABASE}")
         logging.debug(f"AWS Config: {self.AWS}")
         logging.debug(f"OpenAI Config: {self.OPENAI}")
+        logging.debug(f"Shopify Config: {self.SHOPIFY}")
         logging.debug(f"App Settings: {self.APP}")
 
 

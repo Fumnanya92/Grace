@@ -98,7 +98,13 @@ class GraceBrain:
     # -----------------------------------------------------------------
     def intent_keys(self) -> List[str]:
         """Return every known intent for tagging in prompts."""
-        return sorted(set(INTENT_PHRASES) | set(self.fallbacks))
+        # 🔸 Include the names of each LangChain tool so GPT can tag them
+        tool_tags = {
+            "shopify_product_lookup",
+            "shopify_create_order",
+            "shopify_track_order",
+        }
+        return sorted(set(INTENT_PHRASES) | set(self.fallbacks) | tool_tags)
 
     def extract_response_key(self, text: str) -> str:
         """Extract [[intent_key]] tag from GPT reply."""
@@ -141,6 +147,10 @@ class GraceBrain:
             f"Product highlights:\n{catalog_intro}\n\n"
             "Respond conversationally, nudge toward purchase where appropriate, "
             f"and tag your reply with exactly one of the following keys: {keys}\n"
+            # 🔸 Simple hint so GPT knows what each special tag does
+            "▪ [[shopify_product_lookup]] → call the product lookup tool\n"
+            "▪ [[shopify_create_order]]  → create a draft‑order & return payment link\n"
+            "▪ [[shopify_track_order]]   → check fulfilment status\n"
         )
 
     # -----------------------------------------------------------------

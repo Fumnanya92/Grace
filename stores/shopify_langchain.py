@@ -1,49 +1,66 @@
-from langchain_core.runnables import RunnableLambda
-from langchain_core.runnables import RunnableMap
-from stores.shopify import (
-    get_shopify_products,
-    get_product_details,
-    format_product_response,
-)
-import logging
+"""
+LangChain tool that answers *one* question:
+↳ “What’s the price / stock / availability of a product in our Shopify store?”
 
-# Logger setup
+• It accepts a **single string** (the user query) – so it’s compatible with
+  Zero‑Shot‑ReAct / MRKL agents.
+• Internally it calls the async helper `get_product_details` and blocks until
+  the coroutine finishes.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from langchain.tools import Tool
+
+from stores.shopify_async import (
+    get_product_details,   # ↩ async ‑ returns a ready–to–send string
+    is_product_query,
+)
+
 logger = logging.getLogger("shopify_langchain")
 
-# --- LangChain Runnables ---
+# ---------------------------------------------------------------------------#
+# blocking wrapper – agent tools must be *sync* functions
+# ---------------------------------------------------------------------------#
+async def _blocking_product_lookup(query: str) -> str:
+    """
+    Synchronous wrapper that:
 
-# Step 1: Fetch all Shopify products
-fetch_products_runnable = RunnableLambda(
-    lambda _: get_shopify_products()
-)
+      1. Ignores queries that clearly aren’t about products (returns "")
+      2. Runs the async look‑up coroutine in a fresh event‑loop
+         (or re‑uses the current one if already running)
+      3. Propagates a short, safe error message on failure
+    """
+    if not is_product_query(query):
+        logger.info("Not a product question → let the agent keep thinking")
+        return ""                       # let the agent continue reasoning
 
-# Step 2: Get product details for a specific query
-get_product_details_runnable = RunnableLambda(
-    lambda query: get_product_details(query)
-)
-
-# Step 3: Format the product response
-format_response_runnable = RunnableLambda(
-    lambda product: format_product_response(product)
-)
-
-# --- LangChain Pipeline ---
-ShopifyProductPipeline = (
-    fetch_products_runnable
-    | RunnableMap({
-        "query": lambda query: query,  # Pass the query through
-        "products": lambda _: get_shopify_products(),  # Fetch products
-    })
-    | get_product_details_runnable
-    | format_response_runnable
-)
-
-# --- Example Usage ---
-async def fetch_and_format_product(query: str) -> str:
-    """Fetch and format a product response using the LangChain pipeline."""
     try:
-        response = await ShopifyProductPipeline.ainvoke(query)
-        return response
-    except Exception as e:
-        logger.error(f"Error in Shopify product pipeline: {e}", exc_info=True)
-        return "Sorry, I couldn't retrieve the product details."
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    try:
+        return loop.run_until_complete(get_product_details(query))
+    except Exception as exc:            # noqa: BLE001
+        logger.exception("Shopify lookup failed: %s", exc)
+        return "Sorry, I couldn't retrieve live product information."
+
+# ---------------------------------------------------------------------------#
+# LangChain Tool definition
+# ---------------------------------------------------------------------------#
+shopify_tool = Tool(
+    name="shopify_product_lookup",
+    description=(
+        "Look up price, stock, or availability of a product in the Shopify "
+        "store when the user asks about an item (e.g. 'Do you have the Bloom "
+        "Dress in stock?')."
+    ),
+    func=_blocking_product_lookup,   # sync callable → required by Zero‑Shot agent
+    return_direct=True,              # agent will surface the string as‑is
+)
+
+__all__ = ["shopify_tool"]

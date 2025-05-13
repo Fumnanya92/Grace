@@ -18,6 +18,7 @@ from typing import Optional
 from pydantic import BaseModel
 from pathlib import Path
 
+from modules.shopify_webhooks import router as shopify_router
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
 from modules.s3_service import S3Service
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI):
     await shutdown()
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(shopify_router)
 
 # Define the base directory and config directory
 BASE_DIR = Path(__file__).resolve().parent

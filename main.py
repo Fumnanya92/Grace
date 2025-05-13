@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, status, Form, Response, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, Form, Response, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from twilio.twiml.messaging_response import MessagingResponse
@@ -18,6 +18,15 @@ from typing import Optional
 from pydantic import BaseModel
 from pathlib import Path
 
+# ---------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------
+class PaymentVerification(BaseModel):
+    code: str
+
+# ---------------------------------------------------------------------
+# Imports for Modules
+# ---------------------------------------------------------------------
 from modules.shopify_webhooks import router as shopify_router
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
@@ -29,7 +38,9 @@ from config import config
 from logging_config import configure_logger
 from init_db import init_db
 
-# Configure logger
+# ---------------------------------------------------------------------
+# Initialization
+# ---------------------------------------------------------------------
 logger = configure_logger("main")
 logger.info("Main module initialized.")
 
@@ -45,10 +56,9 @@ image_processor = ImageProcessor(s3_service)
 if config.APP["debug"]:
     logger.info("Debug mode enabled")
 
-class PaymentVerification(BaseModel):
-    code: str
-
-
+# ---------------------------------------------------------------------
+# FastAPI App Setup
+# ---------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await startup()
@@ -61,22 +71,21 @@ app.include_router(shopify_router)
 # Define the base directory and config directory
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_DIR = BASE_DIR / "config"
-
-# Ensure the 'config' directory exists
-CONFIG_DIR.mkdir(exist_ok=True)  # Safely create the directory if it doesn't exist
+CONFIG_DIR.mkdir(exist_ok=True)  # Ensure the 'config' directory exists
 
 # Mount the 'config' directory as static files
 app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
 
+# ---------------------------------------------------------------------
+# Startup and Shutdown
+# ---------------------------------------------------------------------
 async def startup():
     logger.info("Starting Grace...")
-
-    # Ensure required files exist in the config directory
     ensure_required_files()
-
     asyncio.create_task(refresh_cached_images())
     await start_ngrok()
     init_db()
+    await payment_handler._ensure_tables()  # Ensure payment database tables exist
 
 async def shutdown():
     logger.info("Gracefully shutting down Grace.")
@@ -90,6 +99,9 @@ async def start_ngrok():
     except Exception as e:
         logger.error(f"Error starting Ngrok: {e}")
 
+# ---------------------------------------------------------------------
+# Webhook Endpoints
+# ---------------------------------------------------------------------
 @app.post("/webhook")
 async def handle_webhook(
     request: Request,
@@ -107,6 +119,19 @@ async def handle_webhook(
     responses = BotResponses()
 
     try:
+        # Check if the sender is the accountant
+        if sender == config.BUSINESS_RULES["accountant_contact"]:
+            await payment_handler.process_accountant_message(message)
+            return Response(content="ok", media_type="text/plain")
+
+        # Check if the message is payment-related
+        if "payment" in message.lower() or "deposit" in message.lower():
+            reply = await payment_handler.process_user_message(sender, message)
+            twilio_resp = MessagingResponse()
+            twilio_resp.message(reply)
+            await log_chat(sender, message, reply)
+            return Response(content=str(twilio_resp), media_type="application/xml")
+
         # Build conversation history
         conversation_history = await build_conversation_history(sender)
 
@@ -129,6 +154,9 @@ async def handle_webhook(
 
 @app.post("/verify-payment")
 async def verify_payment(verification: PaymentVerification):
+    """
+    Verify a payment using the PaymentHandler.
+    """
     try:
         logger.debug(f"Payment verification request: {verification.dict()}")
         result = await asyncio.to_thread(payment_handler.verify_payment, verification.code)
@@ -185,6 +213,9 @@ async def health_check():
 async def home():
     return "Hello from Grace!"
 
+# ---------------------------------------------------------------------
+# Utility Functions
+# ---------------------------------------------------------------------
 async def log_chat(sender: str, user_msg: str, bot_reply: str) -> None:
     clean_sender = sender.replace("whatsapp:", "")
     log_file = f"logs/{clean_sender}_chat_history.json"
@@ -222,12 +253,6 @@ async def refresh_cached_images():
         logger.info("Refreshed cached product images")
         await asyncio.sleep(300)
 
-def ensure_config_directory():
-    """Ensure the 'config' directory exists."""
-    if not os.path.exists("config"):
-        os.makedirs("config")
-        logger.info("Created 'config' directory.")
-
 def ensure_required_files():
     """Ensure required configuration files exist in the 'config' directory."""
     required_files = ["config.json", "catalog.json", "speech_library.json", "fallback_responses.json"]
@@ -242,5 +267,8 @@ def ensure_required_files():
 async def cached_health_check():
     return await health_check()
 
+# ---------------------------------------------------------------------
+# Main Entry Point
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=config.APP["port"], reload=config.APP["debug"])

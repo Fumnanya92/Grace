@@ -19,7 +19,6 @@ from openai import AsyncOpenAI
 from config import config
 from logging_config import configure_logger
 from modules.langchain_agent import GraceAgent
-
 from modules.grace_brain import GraceBrain
 from modules.utils import detect_picture_request
 from modules.image_processing_module import ImageProcessor
@@ -29,7 +28,7 @@ from modules.intent_recognition_module import recognize_intent, normalize_messag
 logger = configure_logger("bot_responses")
 
 # ---------------------------------------------------------------------------
-# Tunables & shared singletons
+# Constants & Shared Singletons
 # ---------------------------------------------------------------------------
 MAX_IMAGES: int = 10
 MAX_HISTORY_LENGTH: int = 1000
@@ -40,17 +39,17 @@ image_processor = ImageProcessor(S3Service())
 image_history: Dict[str, List[Dict[str, float]]] = {}
 
 # ---------------------------------------------------------------------------
-# BotResponses class – API unchanged, internals improved
+# BotResponses Class
 # ---------------------------------------------------------------------------
 class BotResponses:
-    """High‑level orchestration for Grace’s responses."""
+    """High-level orchestration for Grace’s responses."""
 
     def __init__(self) -> None:
         self.brain = GraceBrain()
         self.gpt_client = AsyncOpenAI(timeout=REQUEST_TIMEOUT)
 
     # ------------------------------------------------------------------
-    # Intent dispatch map
+    # Intent Dispatch Map
     # ------------------------------------------------------------------
     def intent_handlers(self) -> Dict[str, Callable]:
         """Return the mapping of intent → handler."""
@@ -67,7 +66,7 @@ class BotResponses:
         }
 
     # ------------------------------------------------------------------
-    # Public handlers – called from main.py
+    # Public Handlers – Called from main.py
     # ------------------------------------------------------------------
     async def handle_text_message(
         self,
@@ -84,7 +83,7 @@ class BotResponses:
             formatted_history = self.format_conversation(conversation_history)
             logger.info(f"Formatted conversation history: {formatted_history}")
 
-            # Build the prompt (await the coroutine)
+            # Build the prompt
             prompt = await self.brain.build_prompt(formatted_history, message)
             logger.info(f"Generated prompt: {prompt}")
 
@@ -133,9 +132,9 @@ class BotResponses:
         return self.brain.get_response("unsupported_media")
 
     # ------------------------------------------------------------------
-    # Intent‑specific handlers
+    # Intent-Specific Handlers
     # ------------------------------------------------------------------
-    async def handle_configured_text(self, intent: str, _msg: str, _hist: list) -> str:  # noqa: D401
+    async def handle_configured_text(self, intent: str, _msg: str, _hist: list) -> str:
         """Return canned responses stored in speech_library.json."""
         return self.brain.get_response(intent)
 
@@ -144,6 +143,7 @@ class BotResponses:
         return f"We're open from {hours['start']} to {hours['end']}."
 
     async def handle_catalog_response(self, _intent: str, _msg: str, _hist: list) -> str:
+        """Handle catalog requests by fetching and formatting product data."""
         try:
             catalog = await self.brain.get_catalog()
             if not catalog:
@@ -164,13 +164,14 @@ class BotResponses:
             return self.brain.get_response("catalog_error")
 
     async def handle_off_topic(self, _intent: str, _msg: str, _hist: list) -> str:
+        """Handle off-topic messages with a funny redirect."""
         return self.brain.get_response("funny_redirects")
 
     # ------------------------------------------------------------------
-    # Utility helpers
+    # Utility Helpers
     # ------------------------------------------------------------------
     def format_conversation(self, history: List[Dict[str, str]]) -> str:
-        """Condense recent chat into a plain‑text transcript for prompting."""
+        """Condense recent chat into a plain-text transcript for prompting."""
         formatted = [
             f"{h['role']}: {h['content']}" for h in history[-MAX_HISTORY_MESSAGES:] if h.get("role") and h.get("content")
         ]

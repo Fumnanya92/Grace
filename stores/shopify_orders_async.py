@@ -139,4 +139,20 @@ async def get_order_status(order_id: str) -> str:
         )
         return f"Order Status: {status}\n{tracking_info if tracking_info else 'No tracking information available.'}\nView your order: {order_status_url}"
 
-__all__ = ["create_draft_order", "get_order_status"]
+# ---------------------------------------------------------------------
+# Tracking details lookup
+# ---------------------------------------------------------------------
+async def get_tracking_details(tracking_number: str) -> str:
+    """
+    Fetch tracking details from a third-party API.
+    """
+    url = f"https://api.aftership.com/v4/trackings/{tracking_number}"
+    headers = {"Authorization": "Bearer YOUR_AFTERSHIP_API_KEY"}
+
+    async with _client() as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("data", {}).get("tracking", {}).get("checkpoints", [])
+
+__all__ = ["create_draft_order", "get_order_status", "get_tracking_details"]

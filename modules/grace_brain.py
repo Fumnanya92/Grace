@@ -13,11 +13,10 @@ Responsibilities:
 """
 
 from __future__ import annotations
-
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from logging_config import configure_logger
 from modules.utils import (
@@ -25,16 +24,20 @@ from modules.utils import (
     update_speech_library,
     INTENT_PHRASES,
 )
+from stores.shopify_async import get_shopify_products
 
 logger = configure_logger("grace_brain")
 
 # ---------------------------------------------------------------------
-# File paths
+# Constants and File Paths
 # ---------------------------------------------------------------------
 CONFIG_DIR = Path("config")
 FALLBACKS_FILE = CONFIG_DIR / "fallback_responses.json"
 
 
+# ---------------------------------------------------------------------
+# Utility Functions
+# ---------------------------------------------------------------------
 def _load_json(path: Path, default: Optional[dict] = None) -> dict:
     """Read JSON file or return *default* if missing/error."""
     try:
@@ -47,15 +50,22 @@ def _load_json(path: Path, default: Optional[dict] = None) -> dict:
         return default or {}
 
 
+async def fetch_catalog() -> List[Dict[str, Any]]:
+    """Fetch the product catalog dynamically from Shopify."""
+    return await get_shopify_products()
+
+
+# ---------------------------------------------------------------------
+# GraceBrain Class
+# ---------------------------------------------------------------------
 class GraceBrain:
     def __init__(self) -> None:
         self.config = _load_json(CONFIG_DIR / "config.json", default={})
         self.tone = _load_json(CONFIG_DIR / "tone.json", default={"style": "friendly"})
-        self.catalog: List[Dict] = _load_json(CONFIG_DIR / "catalog.json", default={}).get("data", [])
         self.fallbacks = _load_json(FALLBACKS_FILE, default={"default_response": "I'm still learning 😊"})
 
     # -----------------------------------------------------------------
-    # ==== Canned Responses ===========================================
+    # Canned Responses
     # -----------------------------------------------------------------
     def get_response(self, intent: str, **kwargs) -> str:
         """Return a canned response formatted with kwargs, fallback to backup JSON."""
@@ -66,24 +76,14 @@ class GraceBrain:
         return self.fallbacks.get(intent, self.fallbacks.get("default_response", "[no_reply]"))
 
     # -----------------------------------------------------------------
-    # ==== Config Accessors ===========================================
+    # Config Accessors
     # -----------------------------------------------------------------
-    def get_catalog(self) -> List[Dict]:
-        return self.catalog
-
     def get_config_value(self, key: str, default=None):
+        """Retrieve a value from the config."""
         return self.config.get(key, default)
 
-    def get_business_hours(self) -> Dict[str, str]:
-        return self.config.get("business_hours", {"start": "09:00", "end": "17:00"})
-
-    def get_payment_details(self) -> Dict[str, str]:
-        return self.config.get("payment_details", {})
-
-    def is_catalog_enabled(self) -> bool:
-        return bool(self.catalog)
-
     def get_business_info(self) -> Dict:
+        """Return business information from the config."""
         return {
             "name": self.config.get("business_name"),
             "type": self.config.get("business_type"),
@@ -94,11 +94,32 @@ class GraceBrain:
         }
 
     # -----------------------------------------------------------------
-    # ==== Intent Helpers =============================================
+    # Catalog Handling
+    # -----------------------------------------------------------------
+    async def get_catalog(self) -> List[Dict[str, Any]]:
+        """
+        Fetch the product catalog dynamically from Shopify.
+        Returns a list of products.
+        """
+        try:
+            catalog = await fetch_catalog()
+            if not catalog:
+                logger.warning("Catalog fetch returned an empty list.")
+                return []
+            return catalog
+        except Exception as exc:
+            logger.error("Failed to fetch catalog: %s", exc)
+            return []
+
+    def is_catalog_enabled(self) -> bool:
+        """Check if the catalog is enabled."""
+        return True  # Always enabled since we're fetching dynamically
+
+    # -----------------------------------------------------------------
+    # Intent Helpers
     # -----------------------------------------------------------------
     def intent_keys(self) -> List[str]:
         """Return every known intent for tagging in prompts."""
-        # 🔸 Include the names of each LangChain tool so GPT can tag them
         tool_tags = {
             "shopify_product_lookup",
             "shopify_create_order",
@@ -113,7 +134,7 @@ class GraceBrain:
         return "default_response"
 
     # -----------------------------------------------------------------
-    # ==== GPT Prompt Builder =========================================
+    # GPT Prompt Builder
     # -----------------------------------------------------------------
     async def build_prompt(self, chat_history: str, user_message: str) -> str:
         """
@@ -128,15 +149,9 @@ class GraceBrain:
             "You are Grace, a warm and helpful sales assistant for a small business.",
         )
 
-        # Handle catalog preview
-        if isinstance(self.catalog, list) and self.catalog:
-            catalog_intro = "\n".join(
-                f"- {item.get('name', 'Unnamed')}: {self.get_business_info().get('currency', '₦')}{item.get('price', 'N/A')}"
-                for item in self.catalog[:5]
-            )
-        else:
-            logger.warning("Catalog is missing or invalid.")
-            catalog_intro = "Our product list is currently empty."
+        # Fetch catalog dynamically
+        catalog = await self.get_catalog()
+        catalog_intro = self._build_catalog_intro(catalog)
 
         keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
 
@@ -147,14 +162,23 @@ class GraceBrain:
             f"Product highlights:\n{catalog_intro}\n\n"
             "Respond conversationally, nudge toward purchase where appropriate, "
             f"and tag your reply with exactly one of the following keys: {keys}\n"
-            # 🔸 Simple hint so GPT knows what each special tag does
             "▪ [[shopify_product_lookup]] → call the product lookup tool\n"
             "▪ [[shopify_create_order]]  → create a draft‑order & return payment link\n"
             "▪ [[shopify_track_order]]   → check fulfilment status\n"
         )
 
+    def _build_catalog_intro(self, catalog: List[Dict[str, Any]]) -> str:
+        """Build a catalog preview for the prompt."""
+        if catalog:
+            return "\n".join(
+                f"- {item.get('name', 'Unnamed')}: {self.get_business_info().get('currency', '₦')}{item.get('price', 'N/A')}"
+                for item in catalog[:5]
+            )
+        logger.warning("Catalog is missing or invalid.")
+        return "Our product list is currently empty."
+
     # -----------------------------------------------------------------
-    # ==== AI Learning at Runtime =====================================
+    # AI Learning at Runtime
     # -----------------------------------------------------------------
     async def update_library(self, intent: str, user_phrase: str, ai_response: str) -> None:
         """Persist new Q&A pair to speech_library and refresh cache."""

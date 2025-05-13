@@ -10,7 +10,7 @@ This tool can be used with a LangChain agent (e.g. a zero-shot-react-description
 """
 import logging
 from langchain.tools import tool
-from stores.shopify import get_product_details, is_product_query, format_product_response
+from stores.shopify_async import get_product_details, is_product_query, format_product_response
 
 # Logger setup
 logger = logging.getLogger("shopify_langchain")

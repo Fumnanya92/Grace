@@ -83,9 +83,10 @@ class BotResponses:
             formatted_history = self.format_conversation(conversation_history)
             logger.info(f"Formatted conversation history: {formatted_history}")
 
-            # Build the prompt
+            # Build the prompt and get temperature
             prompt = await self.brain.build_prompt(formatted_history, message)
             logger.info(f"Generated prompt: {prompt}")
+
 
             # Run LangChain pipeline
             response = await GraceAgent.ainvoke(prompt)
@@ -102,6 +103,12 @@ class BotResponses:
             # Extract [[tag]] and clean response
             tag = self.brain.extract_response_key(response_text) or "unknown"
             cleaned = re.sub(r"\[\[.*?\]\]", "", response_text).strip()
+
+            # Handle Shopify product lookup if tagged
+            if tag == "shopify_product_lookup":
+                product_answer = await self.handle_shopify_product_lookup(message)
+                if product_answer and "couldn’t find" not in product_answer.lower():
+                    cleaned = product_answer
 
             # Log and update learned response
             await self.brain.update_library(tag, message, cleaned)
@@ -147,21 +154,48 @@ class BotResponses:
         try:
             catalog = await self.brain.get_catalog()
             if not catalog:
-                return self.brain.get_response("catalog_empty")
+                return "I'm sorry, but our product catalog is currently empty. Please check back later!"
 
-            intro = self.brain.get_response("catalog_intro")
-            lines = [intro]
-            for item in catalog[:MAX_IMAGES]:
-                name, url = item.get("name"), item.get("url")
-                if not name or not url:
-                    logger.warning("Invalid catalog item: %s", item)
-                    continue
-                clean_url = urlunparse(urlparse(url)._replace(query=""))
-                lines.append(f"{name}: {clean_url}")
-            return "\n".join(lines)
-        except Exception:
+            # Filter products based on user query (if applicable)
+            filtered_products = [
+                f"{item['name']}: {item['price']} {self.brain.get_business_info().get('currency', '₦')}"
+                for item in catalog if item.get("name") and item.get("price")
+            ]
+
+            if not filtered_products:
+                return "I couldn't find any matching products. Can you provide more details?"
+
+            # Limit the number of products displayed
+            product_list = "\n".join(filtered_products[:5])
+            return f"Here are some products you might like:\n{product_list}"
+
+        except Exception as e:
             logger.exception("Catalog fetch failed")
-            return self.brain.get_response("catalog_error")
+            return "I'm sorry, I couldn't fetch the product catalog at the moment. Please try again later."
+
+    async def handle_shopify_product_lookup(self, query: str) -> str:
+        """Handle product lookup requests."""
+        try:
+            catalog = await self.brain.get_catalog()
+            if not catalog:
+                return "I'm sorry, but our product catalog is currently empty. Please check back later!"
+
+            # Search for products matching the query
+            matching_products = [
+                f"{item['name']}: {item['price']} {self.brain.get_business_info().get('currency', '₦')}"
+                for item in catalog if query.lower() in item.get("name", "").lower()
+            ]
+
+            if not matching_products:
+                return f"I couldn't find any products matching '{query}'. Can you try a different query?"
+
+            # Limit the number of products displayed
+            product_list = "\n".join(matching_products[:5])
+            return f"Here are the products I found:\n{product_list}"
+
+        except Exception as e:
+            logger.exception("Product lookup failed")
+            return "I'm sorry, I couldn't fetch the product details at the moment. Please try again later."
 
     async def handle_off_topic(self, _intent: str, _msg: str, _hist: list) -> str:
         """Handle off-topic messages with a funny redirect."""

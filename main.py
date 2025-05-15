@@ -89,7 +89,12 @@ async def startup():
 
 async def shutdown():
     logger.info("Gracefully shutting down Grace.")
-    ngrok.kill()
+    try:
+        logger.debug("Attempting to kill Ngrok process...")
+        ngrok.kill()
+        logger.debug("Ngrok process killed successfully.")
+    except Exception as e:
+        logger.error(f"Error while shutting down Ngrok: {e}")
 
 async def start_ngrok():
     try:

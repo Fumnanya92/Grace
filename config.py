@@ -1,5 +1,7 @@
 import os
 import logging
+import json
+from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, Any
 
@@ -8,7 +10,6 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
-
 
 class Config:
     """Central configuration class for all application settings."""
@@ -27,6 +28,7 @@ class Config:
         self._validate_openai_config()
         self._validate_shopify_config()
         self._ensure_database_file()
+        self._load_business_config()
 
         # Add direct attributes for frequently accessed credentials
         self.TWILIO_ACCOUNT_SID = self.TWILIO["account_sid"]
@@ -45,18 +47,6 @@ class Config:
     }
 
     # ---------------------------------------------------------------------
-    # Payment Configuration
-    # ---------------------------------------------------------------------
-    PAYMENT: Dict[str, Any] = {
-        "account_name": os.getenv("ACCOUNT_NAME", "Atuchewoman Empire"),
-        "account_number": os.getenv("ACCOUNT_NUMBER", "5401973359"),
-        "bank_name": os.getenv("BANK_NAME", "Providus Bank"),
-        "deposit_percentage": float(os.getenv("DEPOSIT_PERCENTAGE", "0.5")),
-        "total_amount": int(os.getenv("TOTAL_AMOUNT", "600000")),
-        "verification_code_length": int(os.getenv("VERIFICATION_CODE_LENGTH", "4")),
-    }
-
-    # ---------------------------------------------------------------------
     # Database Configuration
     # ---------------------------------------------------------------------
     DATABASE: Dict[str, Any] = {
@@ -68,7 +58,7 @@ class Config:
         },
     }
 
-    DATA_DIR = "data"  # Add this line to specify the directory for database files
+    DATA_DIR = "data"  # Directory for database files
 
     # ---------------------------------------------------------------------
     # AWS S3 Configuration
@@ -104,19 +94,12 @@ class Config:
     # ---------------------------------------------------------------------
     APP: Dict[str, Any] = {
         "debug": os.getenv("DEBUG", "False").lower() == "true",
-        "port": int(os.getenv("PORT", "5000")),
+        "port": int(os.getenv("PORT", "8000")),
         "ngrok_auth_token": os.getenv("NGROK_AUTH_TOKEN"),
         "log_days_to_keep": int(os.getenv("LOG_DAYS_TO_KEEP", "7")),
         "default_image_link": os.getenv(
             "DEFAULT_IMAGE_LINK", "https://example.com/catalog"
         ),
-    }
-
-    # ---------------------------------------------------------------------
-    # Business Rules Configuration
-    # ---------------------------------------------------------------------
-    BUSINESS_RULES: Dict[str, str] = {
-        "accountant_contact": os.getenv("ACCOUNTANT_CONTACT", "whatsapp:+1234567890"),
     }
 
     # ---------------------------------------------------------------------
@@ -154,6 +137,19 @@ class Config:
             open(db_path, "w").close()  # Create an empty file
             logging.warning(f"Database file created at: {db_path}")
 
+    def _load_business_config(self):
+        """Load business configuration from a JSON file."""
+        config_path = Path("config/config.json")
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Dynamically set all keys from config.json as uppercase attributes
+                for key, value in data.items():
+                    setattr(self, key.upper(), value)
+        else:
+            logging.warning("config/config.json not found. Business config not loaded.")
+            raise FileNotFoundError("config/config.json not found.")
+
     # ---------------------------------------------------------------------
     # Logging Configuration
     # ---------------------------------------------------------------------
@@ -161,14 +157,17 @@ class Config:
         """Log the loaded configuration for debugging purposes."""
         logging.info("Configuration loaded successfully.")
         logging.debug(f"Twilio Config: {self.TWILIO}")
-        logging.debug(f"Payment Config: {self.PAYMENT}")
         logging.debug(f"Database Config: {self.DATABASE}")
         logging.debug(f"AWS Config: {self.AWS}")
         logging.debug(f"OpenAI Config: {self.OPENAI}")
         logging.debug(f"Shopify Config: {self.SHOPIFY}")
         logging.debug(f"App Settings: {self.APP}")
-        logging.debug(f"Business Rules: {self.BUSINESS_RULES}")
-
+        # Log all business config keys
+        for attr in dir(self):
+            if attr.isupper() and attr not in [
+                "TWILIO", "DATABASE", "AWS", "OPENAI", "SHOPIFY", "APP", "DATA_DIR"
+            ]:
+                logging.debug(f"{attr}: {getattr(self, attr)}")
 
 # ---------------------------------------------------------------------
 # Singleton Configuration Instance

@@ -106,8 +106,8 @@ class PaymentHandler:
 
         code = "".join(random.choices("0123456789", k=4))
         amount = int(
-            config.PAYMENT_DETAILS["total_amount"]
-            * config.PAYMENT_DETAILS.get("deposit_percentage", 0.5)
+            config.PAYMENT["total_amount"]
+            * config.PAYMENT.get("deposit_percentage", 0.5)
         )
 
         await db.execute(
@@ -122,9 +122,9 @@ class PaymentHandler:
         await self._alert_accountant(sender, amount, code)
 
         return config.RESPONSES["payment"]["instructions"].format(
-            account_name=config.PAYMENT_DETAILS["account_name"],
-            account_number=config.PAYMENT_DETAILS["account_number"],
-            bank_name=config.PAYMENT_DETAILS["bank_name"],
+            account_name=config.PAYMENT["account_name"],
+            account_number=config.PAYMENT["account_number"],
+            bank_name=config.PAYMENT["bank_name"],
             amount=amount,
         )
 

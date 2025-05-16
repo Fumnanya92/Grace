@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Form, Response, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from twilio.twiml.messaging_response import MessagingResponse
 from pyngrok import ngrok, conf
 import os
@@ -24,6 +25,9 @@ from pathlib import Path
 class PaymentVerification(BaseModel):
     code: str
 
+class ShopifyAskRequest(BaseModel):
+    query: str
+
 # ---------------------------------------------------------------------
 # Imports for Modules
 # ---------------------------------------------------------------------
@@ -34,6 +38,7 @@ from modules.s3_service import S3Service
 from modules.image_processing_module import ImageProcessor
 from modules.utils import detect_picture_request, cached_list_images
 from modules.bot_responses import BotResponses
+from modules.shopify_agent import agent
 from config import config
 from logging_config import configure_logger
 from init_db import init_db
@@ -52,6 +57,7 @@ conf.get_default().auth_token = config.APP["ngrok_auth_token"]
 payment_handler = PaymentHandler()
 s3_service = S3Service()
 image_processor = ImageProcessor(s3_service)
+responses = BotResponses()  # Single instance for reuse
 
 if config.APP["debug"]:
     logger.info("Debug mode enabled")
@@ -76,21 +82,37 @@ CONFIG_DIR.mkdir(exist_ok=True)  # Ensure the 'config' directory exists
 # Mount the 'config' directory as static files
 app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
 
+# Jinja2 templates for admin frontend
+templates = Jinja2Templates(directory="admin/templates")
+
 # ---------------------------------------------------------------------
 # Startup and Shutdown
 # ---------------------------------------------------------------------
+refresh_task: asyncio.Task | None = None
+
 async def startup():
     logger.info("Starting Grace...")
     ensure_required_files()
-    asyncio.create_task(refresh_cached_images())
+    global refresh_task
+    refresh_task = asyncio.create_task(refresh_cached_images())
     await start_ngrok()
     init_db()
     await payment_handler._ensure_tables()  # Ensure payment database tables exist
 
 async def shutdown():
     logger.info("Gracefully shutting down Grace.")
+
+    # 1. stop refresh task
+    global refresh_task
+    if refresh_task and not refresh_task.cancelled():
+        refresh_task.cancel()
+        try:
+            await refresh_task
+        except asyncio.CancelledError:
+            logger.debug("refresh_cached_images task cancelled")
+
+    # 2. kill ngrok
     try:
-        logger.debug("Attempting to kill Ngrok process...")
         ngrok.kill()
         logger.debug("Ngrok process killed successfully.")
     except Exception as e:
@@ -121,11 +143,9 @@ async def handle_webhook(
     media_type = MediaContentType0
     logger.info(f"Sender: {sender}")
 
-    responses = BotResponses()
-
     try:
         # Check if the sender is the accountant
-        if sender == config.BUSINESS_RULES["accountant_contact"]:
+        if sender == config.BUSINESS_RULES.get("accountant_contact"):
             await payment_handler.process_accountant_message(message)
             return Response(content="ok", media_type="text/plain")
 
@@ -195,6 +215,10 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
         logger.error(f"Error uploading file '{file_type}': {e}")
         raise HTTPException(status_code=500, detail="File upload failed")
 
+@app.get("/admin/upload")
+async def upload_page(request: Request):
+    return templates.TemplateResponse("upload.html", {"request": request})
+
 @app.get("/health")
 async def health_check():
     try:
@@ -217,6 +241,14 @@ async def health_check():
 @app.get("/")
 async def home():
     return "Hello from Grace!"
+
+@app.post("/shopify/ask")
+async def shopify_ask(request: ShopifyAskRequest):
+    """
+    Directly query the Shopify agent with a natural language question.
+    """
+    result = await agent.ainvoke({"input": request.query})
+    return {"result": result["output"] if isinstance(result, dict) and "output" in result else str(result)}
 
 # ---------------------------------------------------------------------
 # Utility Functions
@@ -276,4 +308,10 @@ async def cached_health_check():
 # Main Entry Point
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=config.APP["port"], reload=config.APP["debug"])
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=config.APP["port"],
+        reload=False,          # <── change
+        log_level="info",
+    )

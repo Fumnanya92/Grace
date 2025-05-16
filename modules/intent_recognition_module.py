@@ -12,9 +12,10 @@ The function `recognize_intent()` returns a *list* so existing callers
 (BotResponses) remain unchanged, but it always puts the primary intent
 at index 0.
 """
-
+import logging
 import re
 from typing import List
+
 
 from logging_config import configure_logger
 from modules.utils import match_intent
@@ -115,6 +116,37 @@ KEYWORD_INTENTS = {
         "offer details",
         "what's included",
         "tell me about the package",
+    ],
+    "shopify_product_lookup": [
+        "in stock",
+        "stock of",
+        "do you have",
+        "is available",
+        "availability",
+        "product details",
+        "how much is",
+        "price of",
+        "show product",
+        "find product",
+    ],
+    "shopify_create_order": [
+        "order for",
+        "buy",
+        "purchase",
+        "i want to order",
+        "place order",
+        "create order",
+        "checkout",
+        "add to cart",
+    ],
+    "shopify_track_order": [
+        "track order",
+        "order status",
+        "where is my order",
+        "has my order shipped",
+        "delivery status",
+        "order tracking",
+        "track my order",
     ],
 }
 

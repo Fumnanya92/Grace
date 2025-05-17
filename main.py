@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from pydantic import BaseModel
 from pathlib import Path
+from stores.shopify_async import get_products_for_image_matching
 
 # ---------------------------------------------------------------------
 # Models
@@ -99,6 +100,9 @@ async def startup():
     init_db()
     await payment_handler._ensure_tables()  # Ensure payment database tables exist
 
+    shopify_products = await get_products_for_image_matching()
+    await image_processor.load_external_catalog(shopify_products)
+
 async def shutdown():
     logger.info("Gracefully shutting down Grace.")
 
@@ -134,14 +138,22 @@ async def handle_webhook(
     request: Request,
     From: str = Form(...),
     Body: str = Form(""),
-    MediaUrl0: Optional[str] = Form(None),
-    MediaContentType0: Optional[str] = Form(None)
+    MediaContentType0: Optional[str] = Form(None),
+    **form_data
 ):
     sender = From
     message = Body.strip()
-    media_url = MediaUrl0
-    media_type = MediaContentType0
     logger.info(f"Sender: {sender}")
+
+    # Collect all media URLs and types
+    media_urls = []
+    media_types = []
+    for i in range(10):
+        url = form_data.get(f"MediaUrl{i}")
+        mtype = form_data.get(f"MediaContentType{i}")
+        if url:
+            media_urls.append(url)
+            media_types.append(mtype)
 
     try:
         # Check if the sender is the accountant
@@ -160,17 +172,22 @@ async def handle_webhook(
         # Build conversation history
         conversation_history = await build_conversation_history(sender)
 
-        # Process the message or media
-        if media_url:
-            bot_reply = await responses.handle_media_message(sender, media_url, media_type)
+        twilio_resp = MessagingResponse()
+        # Handle multiple media
+        if media_urls:
+            for url, mtype in zip(media_urls, media_types):
+                bot_reply = await responses.handle_media_message(sender, url, mtype)
+                msg = twilio_resp.message(bot_reply)
+                # If you want to echo the image back, uncomment:
+                # if mtype and mtype.startswith("image/"):
+                #     msg.media(url)
         elif message:
             bot_reply = await responses.handle_text_message(sender, message, conversation_history)
+            twilio_resp.message(bot_reply)
         else:
-            bot_reply = "Please send a message or an image."
+            twilio_resp.message("Please send a message or an image.")
 
-        twilio_resp = MessagingResponse()
-        twilio_resp.message(bot_reply)
-        await log_chat(sender, message, bot_reply)
+        await log_chat(sender, message, str(twilio_resp))
         return Response(content=str(twilio_resp), media_type="application/xml")
 
     except Exception as e:
@@ -199,7 +216,8 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
         "catalog": "catalog.json",
         "config": "config.json",
         "speech_library": "speech_library.json",
-        "fallback_responses": "fallback_responses.json"
+        "fallback_responses": "fallback_responses.json",
+        "system_prompt": "system_prompt.json"
     }
 
     if file_type not in filename_map:
@@ -210,6 +228,9 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        # Reload system prompt if updated
+        if file_type == "system_prompt":
+            responses.brain.__init__()  # Re-initialize to reload prompt
         return {"message": f"{file_type} uploaded successfully."}
     except Exception as e:
         logger.error(f"Error uploading file '{file_type}': {e}")

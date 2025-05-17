@@ -186,6 +186,35 @@ class ImageProcessor:
             logger.error(f"Error handling image from {sender}: {e}", exc_info=True)
             return "Sorry, something went wrong while processing your image. Please try again later."
 
+    async def load_external_catalog(self, products: list[dict]):
+        """
+        Load product features from an external product list (e.g., Shopify API).
+        Each product dict must have: id, name, image_url, price, etc.
+        """
+        for product in products:
+            try:
+                image_url = product.get("image_url")
+                if not image_url:
+                    continue
+                img_bytes = await self._download_image(image_url)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpeg") as tmp:
+                    tmp.write(img_bytes)
+                    tmp_path = tmp.name
+                features = await asyncio.to_thread(self._extract_features, tmp_path)
+                os.unlink(tmp_path)
+                if features is not None:
+                    self.design_catalog.append({
+                        "id": product.get("id"),
+                        "name": product.get("name"),
+                        "features": features,
+                        "norm": np.linalg.norm(features),
+                        "price": product.get("price"),
+                        "image_url": image_url,
+                        "meta": product,  # Store all metadata for future use
+                    })
+            except Exception as e:
+                logger.warning(f"Skipping {product.get('name', 'unknown')}: {e}")
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

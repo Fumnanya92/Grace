@@ -256,6 +256,27 @@ async def get_product_details(question: str) -> str:
     return formatted_product
 
 
+async def get_products_for_image_matching() -> list[dict]:
+    """
+    Return products as a list of dicts with id, name, image_url, price, etc.
+    Suitable for image matching/catalog loading.
+    """
+    products = await get_shopify_products()
+    result = []
+    for p in products:
+        image_url = None
+        if p.get("images"):
+            image_url = p["images"][0].get("src")
+        result.append({
+            "id": p.get("id"),
+            "name": p.get("title"),
+            "image_url": image_url,
+            "price": p.get("variants", [{}])[0].get("price"),
+            "meta": p,
+        })
+    return result
+
+
 __all__ = [
     "get_shopify_products",
     "get_product_details",

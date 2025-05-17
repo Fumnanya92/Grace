@@ -147,13 +147,26 @@ class BotResponses:
                 if not catalog:
                     return "I'm sorry, but our product catalog is currently empty. Please check back later!"
                 filtered_products = [
-                    f"{item['name']}: {item['price']} {config.CURRENCY}"
-                    for item in catalog if item.get("name") and item.get("price")
+                    item for item in catalog if item.get("name") and item.get("price")
                 ]
                 if not filtered_products:
                     return "I couldn't find any matching products. Can you provide more details?"
-                product_list = "\n".join(filtered_products[:5])
-                return f"Here are some products you might like:\n{product_list}"
+
+                product_lines = []
+                for item in filtered_products[:5]:
+                    name = item.get("name", "Unnamed Product")
+                    price = item.get("price", "N/A")
+                    currency = getattr(config, "CURRENCY", "₦")
+                    image_url = item.get("image_url") or item.get("image") or "No image available"
+                    description = item.get("description", "")
+                    line = f"{name} ({currency}{price})\n{image_url}"
+                    if description:
+                        line += f"\n{description}"
+                    product_lines.append(line)
+
+                product_list = "\n\n".join(product_lines)
+                return f"Here are some products you might like:\n\n{product_list}"
+
             except Exception as e:
                 logger.exception("Catalog fetch failed")
                 return "I'm sorry, I couldn't fetch the product catalog at the moment. Please try again later."

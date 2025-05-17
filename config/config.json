@@ -1,13 +1,14 @@
 {
     "whatsapp_number": "+2347082229034",
-    "business_id": "akanrabyatuche",
+    "business_id": "Atuchewoman",
     "business_type": "ecommerce",
     "default_language": "en",
-    "business_name": "AkanrabyAtuche",
+    "business_name": "Atuche",
     "currency": "NGN",
     "delivery_time_days": 10,
-    "minimum_order": 4,
-    "payment_policy": "50% upfront, 50% on delivery",
+    "minimum_order": 1,
+    "payment_policy": null,
+    "payment_methods":"bank_transfer",
     "business_hours": {
       "start": "09:00",
       "end": "18:00"
@@ -21,10 +22,10 @@
         "account_number": "5401973359",
         "bank_name": "Providus Bank",
         "deposit_percentage": 0.5,
-        "total_amount": 600000,
+        "total_amount": "{{cart_total}}",
         "verification_code_length": 4
     },
     "business_rules": {
-        "accountant_contact": "whatsapp:+1234567890"
+        "accountant_contact": "whatsapp: +2348167322603"
     }
 }

@@ -66,6 +66,13 @@ class GraceBrain:
         self.config = _load_json(CONFIG_DIR / "config.json", default={})
         self.tone = _load_json(CONFIG_DIR / "tone.json", default={"style": "friendly"})
         self.fallbacks = _load_json(FALLBACKS_FILE, default={"default_response": "I'm still learning 😊"})
+        # Load system prompt once at startup
+        try:
+            with open(CONFIG_DIR / "system_prompt.json", "r", encoding="utf-8") as f:
+                self.system_prompt = json.load(f)["system_prompt"]
+        except Exception as exc:
+            logger.error("Failed to load system prompt: %s", exc)
+            self.system_prompt = "You are Grace, a helpful assistant."
 
     # -----------------------------------------------------------------
     # Canned Responses
@@ -148,16 +155,12 @@ class GraceBrain:
     # GPT Prompt Builder
     # -----------------------------------------------------------------
     async def build_prompt(self, chat_history: str, user_message: str) -> str:
-        persona = self.tone.get(
-            "fallback_persona",
-            "You are Grace, a warm and helpful sales assistant for a small business.",
-        )
-
         catalog = await self.get_catalog()
         catalog_intro = self._build_catalog_intro(catalog)
         keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
-
         business_info = self._build_business_info()
+        business_name = self.config.get("business_name", "Our Company")
+        persona = self.system_prompt.replace("{BUSINESS_NAME}", business_name)
 
         return (
             f"{persona}\n"

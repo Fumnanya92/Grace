@@ -1,13 +1,3 @@
-"""
-Async helpers for querying a Shopify store (cursor‑based pagination, in‑memory
-cache, fuzzy product lookup).  Designed for direct use *and* as a LangChain tool.
-
-✓ cursor pagination (page_info)
-✓ shared httpx.AsyncClient
-✓ robust error / rate‑limit handling
-✓ shallow‑copy cache return to avoid mutation
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -26,9 +16,6 @@ from fuzzywuzzy import fuzz
 
 from config import config  # central secrets
 
-# ---------------------------------------------------------------------------
-# Config / constants
-# ---------------------------------------------------------------------------
 PRODUCT_CACHE_TTL = 300          # seconds
 FUZZY_THRESHOLD   = 70           # fuzzywuzzy score
 RATE_LIMIT_SLEEP  = 0.6          # Shopify allows 2 rps
@@ -39,15 +26,9 @@ SHOPIFY_TOKEN       = config.SHOPIFY["password"]  # Use 'password' as defined in
 
 logger = logging.getLogger("stores.shopify_async")
 
-# ---------------------------------------------------------------------------
-# In‑memory cache
-# ---------------------------------------------------------------------------
 _cached_products: List[Dict[str, Any]] = []
 _last_fetch_time: float = 0.0
 
-# ---------------------------------------------------------------------------
-# Shared HTTP client
-# ---------------------------------------------------------------------------
 _async_client: httpx.AsyncClient | None = None
 
 
@@ -69,9 +50,6 @@ async def _client() -> AsyncGenerator[httpx.AsyncClient, None]:
         pass
 
 
-# ---------------------------------------------------------------------------
-# Low‑level page fetch
-# ---------------------------------------------------------------------------
 async def _fetch_page(
     client: httpx.AsyncClient,
     page_info: str | None = None,
@@ -93,7 +71,6 @@ async def _fetch_page(
         params["page_info"] = page_info
 
     try:
-        # Remove the `verify` argument
         resp = await client.get(url, headers=headers, params=params, follow_redirects=True)
         resp.raise_for_status()
     except httpx.RequestError as exc:
@@ -128,10 +105,6 @@ async def _fetch_page(
 
     return products, next_info
 
-
-# ---------------------------------------------------------------------------
-# Public API – fetch *all* products (with cache)
-# ---------------------------------------------------------------------------
 async def get_shopify_products(force_refresh: bool = False) -> List[Dict[str, Any]]:
     """
     Return a **copy** of the full product list.
@@ -167,9 +140,6 @@ async def get_shopify_products(force_refresh: bool = False) -> List[Dict[str, An
     return products.copy()  # return defensive copy
 
 
-# ---------------------------------------------------------------------------
-# Fuzzy lookup helpers (used by LangChain tool)
-# ---------------------------------------------------------------------------
 def _fuzzy_match_product(name: str, products: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Return best product dict or None."""
     name = name.lower()

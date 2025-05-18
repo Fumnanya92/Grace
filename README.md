@@ -12,11 +12,12 @@ Grace is a fully autonomous, AI-powered sales assistant designed to operate over
 4. [User Flow](#user-flow)
 5. [Technical Architecture](#technical-architecture)
 6. [Tech Stack](#tech-stack)
-7. [Roadmap & Phases](#roadmap--phases)
-8. [Business Model & Monetization](#business-model--monetization)
-9. [Privacy & Compliance](#privacy--compliance)
-10. [Contributing](#contributing)
-11. [License](#license)
+7. [What’s New & Advanced Capabilities](#whats-new--advanced-capabilities)
+8. [Roadmap & Phases](#roadmap--phases)
+9. [Business Model & Monetization](#business-model--monetization)
+10. [Privacy & Compliance](#privacy--compliance)
+11. [Contributing](#contributing)
+12. [License](#license)
 
 ---
 
@@ -161,17 +162,18 @@ This feature is only available on premium plans because it involves:
 ### Backend Structure
 
 - **API Endpoints:**  
-  - `/webhook`: Handles incoming messages
+  - `/webhook`: Handles incoming messages (supports multiple media files)
   - `/shopify/ask`: Direct Shopify queries
-  - `/admin/upload`: Catalog/config uploads
+  - `/admin/upload`: Catalog/config uploads (supports dynamic system prompt reload)
   - `/health`: Health check
 
 - **Modules:**  
   - `bot_responses.py`: Main orchestration and intent routing
-  - `shopify_tools.py`: Shopify integration tools
+  - `shopify_tools.py`: Shopify integration tools (exposed as LangChain tools)
   - `shopify_agent.py`: LangChain agent setup
   - `grace_brain.py`: Prompt building and fallback logic
   - `intent_recognition_module.py`: Intent detection and routing
+  - `image_processing_module.py`: Visual product search and matching
 
 ---
 
@@ -187,6 +189,29 @@ This feature is only available on premium plans because it involves:
 | Storage              | AWS S3 (for images/catalogs)                           |
 | Deployment           | Docker, AWS EC2/EKS                                    |
 | Frontend (Admin)     | React or Streamlit                                     |
+
+---
+
+## What’s New & Advanced Capabilities
+
+### 🖼️ Image-Based Product Lookup
+
+- **Visual Search:**  
+  Customers can send a photo (from Instagram, their phone, etc.) and Grace will identify and match the item against the product catalog (Shopify or any e-commerce platform). Grace returns the closest matches with images, names, and prices.
+- **Flexible Catalog Integration:**  
+  Grace’s image matching works with any e-commerce backend (Shopify, Amazon, etc.)—no hardcoding. Product images and metadata are synced and indexed for fast visual search.
+
+### 📎 Multi-Media Support
+
+- **WhatsApp/Instagram Media:**  
+  Grace can process multiple images in a single message. When a customer sends several images, each is analyzed and matched to products.
+- **Rich Replies:**  
+  When Grace recommends products, she sends both the product details and the product image back to the customer (using WhatsApp’s media message support).
+
+### 🧠 Dynamic System Prompt Reload
+
+- **Live Persona Updates:**  
+  Admins can upload a new system prompt (persona/instructions) via the dashboard or API. Grace reloads her persona instantly—no server restart required.
 
 ---
 

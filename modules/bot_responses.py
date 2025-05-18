@@ -21,11 +21,10 @@ from logging_config import configure_logger
 from modules.langchain_agent import GraceAgent
 from modules.grace_brain import GraceBrain
 from modules.utils import detect_picture_request
-from modules.image_processing_module import ImageProcessor
-from modules.s3_service import S3Service
 from modules.intent_recognition_module import recognize_intent
 from modules.shopify_agent import agent, shopify_product_lookup, shopify_create_order, shopify_track_order
 from modules.payment_module import PaymentHandler
+from modules.shared import image_processor  # <-- Only import the shared instance!
 
 logger = configure_logger("bot_responses")
 
@@ -41,7 +40,6 @@ SHOPIFY_KEYWORDS = [
     "shopify", "order", "stock", "inventory", "product", "buy", "purchase", "track"
 ]
 
-image_processor = ImageProcessor(S3Service())
 image_history: Dict[str, List[Dict[str, float]]] = {}
 
 payment_handler = PaymentHandler()
@@ -113,6 +111,12 @@ class BotResponses:
 
         # Shopify/product lookup
         if intent == "shopify_product_lookup":
+            # Try direct product lookup
+            from stores.shopify_async import get_product_details
+            details = await get_product_details(message)
+            if details and "doesn’t look like a product question" not in details.lower():
+                return details
+            # fallback to LLM if not found
             result = await shopify_product_lookup.ainvoke(message)
             session["pending_order_args"] = {"query": message}
             session["pending_action"] = "finalize_order"
@@ -209,7 +213,9 @@ class BotResponses:
         if media_type.startswith("image/"):
             try:
                 image_history.setdefault(sender, []).append({"url": media_url, "timestamp": time.time()})
-                return await image_processor.handle_image(sender, media_url)
+                # Pass both sender and media_url as required by handle_image
+                result = await image_processor.handle_image(sender, media_url)
+                return result
             except Exception:
                 logger.exception("Image processing error")
                 return self.brain.get_response("image_error")

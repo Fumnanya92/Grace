@@ -19,6 +19,7 @@ from typing import Optional
 from pydantic import BaseModel
 from pathlib import Path
 from stores.shopify_async import get_products_for_image_matching
+from modules.shared import image_processor, s3_service
 
 # ---------------------------------------------------------------------
 # Models
@@ -35,8 +36,6 @@ class ShopifyAskRequest(BaseModel):
 from modules.shopify_webhooks import router as shopify_router
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
-from modules.s3_service import S3Service
-from modules.image_processing_module import ImageProcessor
 from modules.utils import detect_picture_request, cached_list_images
 from modules.bot_responses import BotResponses
 from modules.shopify_agent import agent
@@ -56,8 +55,7 @@ conf.get_default().auth_token = config.APP["ngrok_auth_token"]
 
 # Initialize services
 payment_handler = PaymentHandler()
-s3_service = S3Service()
-image_processor = ImageProcessor(s3_service)
+
 responses = BotResponses()  # Single instance for reuse
 
 if config.APP["debug"]:
@@ -100,6 +98,7 @@ async def startup():
     init_db()
     await payment_handler._ensure_tables()  # Ensure payment database tables exist
 
+    await image_processor.initialize()  # Use the shared instance!
     shopify_products = await get_products_for_image_matching()
     await image_processor.load_external_catalog(shopify_products)
 
@@ -139,11 +138,13 @@ async def handle_webhook(
     From: str = Form(...),
     Body: str = Form(""),
     MediaContentType0: Optional[str] = Form(None),
-    **form_data
 ):
     sender = From
     message = Body.strip()
     logger.info(f"Sender: {sender}")
+
+    form_data = await request.form()
+    logger.info(f"Webhook form data: {dict(form_data)}")
 
     # Collect all media URLs and types
     media_urls = []
@@ -184,10 +185,12 @@ async def handle_webhook(
         elif message:
             bot_reply = await responses.handle_text_message(sender, message, conversation_history)
             twilio_resp.message(bot_reply)
+            await log_chat(sender, message, bot_reply)  # <-- log only the plain reply
         else:
-            twilio_resp.message("Please send a message or an image.")
+            default_reply = "Please send a message or an image."
+            twilio_resp.message(default_reply)
+            await log_chat(sender, message, default_reply)
 
-        await log_chat(sender, message, str(twilio_resp))
         return Response(content=str(twilio_resp), media_type="application/xml")
 
     except Exception as e:

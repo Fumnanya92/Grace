@@ -1,15 +1,21 @@
 import os
 import sys
 
-# Add the project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from stores.shopify_async import get_product_details
 import asyncio
 
-async def test_get_product_details():
-    question = "Do you have a red Dress in stock?"
-    result = await get_product_details(question)
-    print(result)
+async def test_product_search():
+    queries = [
+        "Do you have a red Dress in stock?",
+        "Show me the Jax set",
+        "Bloom Dress"
+    ]
+    for question in queries:
+        print(f"\nTesting query: {question}")
+        details = await get_product_details(question)
+        print("get_product_details result:", details)
 
-asyncio.run(test_get_product_details())
+if __name__ == "__main__":
+    asyncio.run(test_product_search())

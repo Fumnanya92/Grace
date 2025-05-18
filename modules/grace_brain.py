@@ -28,7 +28,7 @@ from modules.utils import (
     update_speech_library,
     INTENT_PHRASES,
 )
-from stores.shopify_async import get_shopify_products
+from stores.shopify_async import get_products_for_image_matching
 
 
 # ---------------------------------------------------------------------
@@ -54,8 +54,8 @@ def _load_json(path: Path, default: Optional[dict] = None) -> dict:
 
 
 async def fetch_catalog() -> List[Dict[str, Any]]:
-    """Fetch the product catalog dynamically from Shopify."""
-    return await get_shopify_products()
+    """Fetch the product catalog dynamically from Shopify, adapted for prompts."""
+    return await get_products_for_image_matching()
 
 
 # ---------------------------------------------------------------------
@@ -67,12 +67,12 @@ class GraceBrain:
         self.tone = _load_json(CONFIG_DIR / "tone.json", default={"style": "friendly"})
         self.fallbacks = _load_json(FALLBACKS_FILE, default={"default_response": "I'm still learning 😊"})
         # Load system prompt once at startup
-        try:
-            with open(CONFIG_DIR / "system_prompt.json", "r", encoding="utf-8") as f:
-                self.system_prompt = json.load(f)["system_prompt"]
-        except Exception as exc:
-            logger.error("Failed to load system prompt: %s", exc)
-            self.system_prompt = "You are Grace, a helpful assistant."
+        prompt_path = Path("config/system_prompt.txt")
+        if prompt_path.exists():
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                self.system_prompt = f.read()
+        else:
+            self.system_prompt = ""
 
     # -----------------------------------------------------------------
     # Canned Responses
@@ -160,10 +160,11 @@ class GraceBrain:
         keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
         business_info = self._build_business_info()
         business_name = self.config.get("business_name", "Our Company")
-        persona = self.system_prompt.replace("{BUSINESS_NAME}", business_name)
+        prompt_template = self.system_prompt
+        system_prompt = prompt_template.format(BUSINESS_NAME=business_name)
 
         return (
-            f"{persona}\n"
+            f"{system_prompt}\n"
             f"{business_info}\n\n"
             "Instructions:\n"
             "- Do not repeat greetings if you have already greeted the user in this conversation.\n"
@@ -180,6 +181,7 @@ class GraceBrain:
     def _build_catalog_intro(self, catalog: List[Dict[str, Any]]) -> str:
         """Build a catalog preview for the prompt."""
         if catalog:
+            logger.info("Sample catalog item for highlights: %s", catalog[0])
             currency = self.config.get("currency", "₦")
             return "\n".join(
                 f"- {item.get('name', 'Unnamed')}: {currency}{item.get('price', 'N/A')}"

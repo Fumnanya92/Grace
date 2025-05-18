@@ -140,6 +140,7 @@ class ImageProcessor:
         # Twilio or public HTTP(S)
         async with self.http_session.get(url, auth=auth if "twilio.com" in parsed.netloc else None) as resp:
             if resp.status not in (200, 302):
+                logger.error(f"Failed to download image: {resp.status} {await resp.text()}")
                 raise ValueError(f"HTTP error {resp.status}")
             return await resp.read()
 
@@ -192,10 +193,14 @@ class ImageProcessor:
         Each product dict must have: id, name, image_url, price, etc.
         """
         for product in products:
+            if not product:
+                logger.warning("Skipping product: product is None")
+                continue
+            image_url = product.get("image_url")
+            if not image_url:
+                logger.warning(f"Skipping {product.get('name', 'unknown')}: missing image_url")
+                continue
             try:
-                image_url = product.get("image_url")
-                if not image_url:
-                    continue
                 img_bytes = await self._download_image(image_url)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpeg") as tmp:
                     tmp.write(img_bytes)

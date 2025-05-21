@@ -155,7 +155,7 @@
 <body>
   <main class="card">
     <h1><i data-lucide="upload-cloud"></i> Upload Configuration</h1>
-    <form action="/admin/upload" method="post" enctype="multipart/form-data">
+    <form id="uploadForm" action="/admin/upload" method="post" enctype="multipart/form-data">
       <div class="field">
         <label for="assetType">Asset Type <span data-lucide="layers"></span></label>
         <select id="assetType" name="file_type" required>
@@ -163,12 +163,13 @@
           <option value="tone">Tone</option>
           <option value="fallback_responses">Fallback Responses</option>
           <option value="config">Config</option>
+          <option value="policies">Policies</option>
         </select>
       </div>
 
       <div class="field">
         <label for="fileInput">Choose File <span data-lucide="file-json"></span></label>
-        <input type="file" id="fileInput" name="file" accept=".json" required />
+        <input type="file" id="fileInput" name="file" accept=".json,.txt,.md" required />
       </div>
 
       <div class="progress" id="progressBar"><span id="progressFill"></span></div>
@@ -187,14 +188,35 @@
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
     const successMessage = document.getElementById('successMessage');
+    const assetType = document.getElementById('assetType');
+    const fileInput = document.getElementById('fileInput');
 
     form.addEventListener('submit', (e) => {
-      const fileInput = document.getElementById('fileInput');
       const file = fileInput.files[0];
-      if (file && file.type !== 'application/json') {
-        alert('❌ Only JSON files are allowed.');
-        e.preventDefault();
-        return;
+      // Accept .json for most, .txt/.md for policies
+      const allowedTypes = {
+        "catalog": ["application/json"],
+        "tone": ["application/json"],
+        "fallback_responses": ["application/json"],
+        "config": ["application/json"],
+        "policies": ["text/plain", "text/markdown"]
+      };
+      const selectedType = assetType.value;
+      const fileType = file.type;
+
+      // Check file type based on asset type
+      if (selectedType === "policies") {
+        if (!(fileType === "text/plain" || fileType === "text/markdown")) {
+          alert('❌ Policies must be a .txt or .md file.');
+          e.preventDefault();
+          return;
+        }
+      } else {
+        if (fileType !== "application/json") {
+          alert('❌ Only JSON files are allowed for this asset type.');
+          e.preventDefault();
+          return;
+        }
       }
 
       e.preventDefault();
@@ -234,6 +256,15 @@
       };
 
       xhr.send(formData);
+    });
+
+    // Dynamically change file input accept attribute based on asset type
+    assetType.addEventListener('change', () => {
+      if (assetType.value === "policies") {
+        fileInput.setAttribute("accept", ".txt,.md");
+      } else {
+        fileInput.setAttribute("accept", ".json");
+      }
     });
   </script>
 </body>

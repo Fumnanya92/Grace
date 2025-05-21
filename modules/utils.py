@@ -7,6 +7,7 @@ Utility helpers for Grace:
 * generic config file helpers
 """
 
+import hashlib
 import json
 import os
 import random
@@ -16,6 +17,7 @@ from typing import Dict, List, Optional, Set
 
 from modules.s3_service import S3Service
 from logging_config import configure_logger
+from stores.shopify_async import get_products_for_image_matching
 
 logger = configure_logger("utils")
 
@@ -232,3 +234,14 @@ def save_config_file(file_key: str, data: dict) -> None:
         logger.info("Configuration file '%s' saved successfully.", file_path)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed to save configuration file '%s': %s", file_path, e)
+
+
+async def compute_state_id() -> str:
+    """
+    Compute a hash representing the current state of the catalog and config.
+    """
+    catalog = await get_products_for_image_matching()
+    catalog_sha = hashlib.sha1(json.dumps(catalog, sort_keys=True).encode()).hexdigest()
+    with open("config/config.json", "rb") as f:
+        config_sha = hashlib.sha1(f.read()).hexdigest()
+    return hashlib.sha1((catalog_sha + config_sha).encode()).hexdigest()

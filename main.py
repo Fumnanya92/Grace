@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 import uvicorn
 import aiofiles
+import hashlib
 import json
 from dotenv import load_dotenv
 from functools import lru_cache
@@ -17,9 +18,15 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 from pydantic import BaseModel
+from openai import AsyncOpenAI
 from pathlib import Path
 from stores.shopify_async import get_products_for_image_matching
 from modules.shared import image_processor, s3_service
+import hashlib
+import csv
+import aiofiles
+import json
+from fastapi import Request
 
 # ---------------------------------------------------------------------
 # Models
@@ -30,14 +37,20 @@ class PaymentVerification(BaseModel):
 class ShopifyAskRequest(BaseModel):
     query: str
 
+class DevChatRequest(BaseModel):
+    query: str
+    context_type: Optional[str] = "none"  # "catalog", "config", "tone", "chatlog", or "none"
+    model: str = "gpt-4o"
+    prompt_override: Optional[str] = None  # <-- add this field
+
 # ---------------------------------------------------------------------
 # Imports for Modules
 # ---------------------------------------------------------------------
 from modules.shopify_webhooks import router as shopify_router
 from modules.payment_module import PaymentHandler
 from modules.user_memory_module import UserMemory, build_conversation_history
-from modules.utils import detect_picture_request, cached_list_images
-from modules.bot_responses import BotResponses
+from modules.utils import detect_picture_request, cached_list_images, compute_state_id
+from modules.bot_responses import BotResponses, grade_turn
 from modules.shopify_agent import agent
 from config import config
 from logging_config import configure_logger
@@ -184,7 +197,12 @@ async def handle_webhook(
                 #     msg.media(url)
         elif message:
             bot_reply = await responses.handle_text_message(sender, message, conversation_history)
-            twilio_resp.message(bot_reply)
+            msg = twilio_resp.message(bot_reply)
+            # --- PATCH: Attach image as media if present in reply ---
+            import re
+            match = re.search(r'(https?://\S+\.(?:jpg|jpeg|png|gif))', bot_reply)
+            if match:
+                msg.media(match.group(1))
             await log_chat(sender, message, bot_reply)  # <-- log only the plain reply
         else:
             default_reply = "Please send a message or an image."
@@ -274,20 +292,197 @@ async def shopify_ask(request: ShopifyAskRequest):
     result = await agent.ainvoke({"input": request.query})
     return {"result": result["output"] if isinstance(result, dict) and "output" in result else str(result)}
 
+def load_prompt(filename: str) -> str:
+    """Utility to load a prompt file from config/."""
+    path = Path("config") / filename
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+@app.post("/dev/chat")
+async def dev_chat(req: DevChatRequest):
+    client = AsyncOpenAI()
+    # Allow prompt override from request, else load default
+    system_prompt = req.prompt_override or load_prompt("dev_assistant_prompt.txt")
+
+    # Inject optional context
+    context_data = ""
+    if req.context_type in {"catalog", "config", "tone"}:
+        file_path = f"config/{req.context_type}.json"
+        if Path(file_path).exists():
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
+                context_data = f"---\n{req.context_type.upper()}:\n{content}\n---"
+    elif req.context_type == "chatlog":
+        from glob import glob
+        files = sorted(glob("logs/*_chat_history.json"), reverse=True)
+        if files:
+            async with aiofiles.open(files[0], "r", encoding="utf-8") as f:
+                data = json.loads(await f.read())
+            last_5 = data[-5:] if len(data) >= 5 else data
+            context_data = "---\nRecent Conversation:\n" + "\n".join(
+                f"U: {x['user_message']}\nG: {x['bot_reply']}" for x in last_5
+            ) + "\n---"
+
+    full_prompt = f"{system_prompt}\n\n{context_data}\n\nUser query:\n{req.query}"
+
+    try:
+        response = await client.chat.completions.create(
+            model=req.model,
+            messages=[{"role": "system", "content": full_prompt}]
+        )
+        return {"result": response.choices[0].message.content.strip()}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/dev")
+async def dev_chat_ui(request: Request):
+    return templates.TemplateResponse("dev_chat.html", {"request": request})
+
+@app.post("/admin/save_speech_library")
+async def save_speech_library(req: Request):
+    data = await req.json()
+    phrase = data.get("phrase", "").strip()
+    response = data.get("response", "").strip()
+    if not phrase or not response:
+        return {"error": "Missing phrase or response"}
+    
+    file_path = "config/speech_library.json"
+    async with aiofiles.open(file_path, "r+", encoding="utf-8") as f:
+        try:
+            existing = json.loads(await f.read())
+        except:
+            existing = {"training_data": []}
+        existing["training_data"].append({"phrase": phrase, "response": response})
+        await f.seek(0)
+        await f.write(json.dumps(existing, indent=2))
+        await f.truncate()
+    return {"message": "Saved to speech library ✅"}
+
+@app.post("/dev/tone")
+async def generate_tones(req: Request):
+    """
+    Generate multiple tone variations for a given message.
+    Returns a dict: { "Friendly": "...", "Formal": "...", ... }
+    """
+    data = await req.json()
+    base = data.get("message", "")
+    tones = {
+        "Friendly": f"Rephrase this in a warm, casual, friendly tone: {base}",
+        "Formal": f"Rephrase this more formally and politely: {base}",
+        "Playful": f"Make this sound fun and cheeky, but still clear: {base}",
+        "Professional": f"Rephrase this for a business-savvy, helpful assistant: {base}",
+    }
+    results = {}
+    client = AsyncOpenAI()
+    for tone, prompt in tones.items():
+        try:
+            res = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Rewrite in a specific tone."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            results[tone] = res.choices[0].message.content.strip()
+        except Exception as e:
+            results[tone] = f"Error: {e}"
+    return results
+
+@app.post("/dev/grade")
+async def dev_grade(req: Request):
+    """
+    Scores a Grace reply for a user message.
+    Returns: { "score": int, "explanation": str }
+    """
+    data = await req.json()
+    user = data.get("user", "")
+    reply = data.get("reply", "")
+    if not user or not reply:
+        return {"error": "Missing user or reply"}
+    prompt = (
+        "You are an expert conversation grader. "
+        "Given a user message and Grace's reply, score the reply from 1-10 for clarity, helpfulness, tone, and conversion potential. "
+        "Then explain your score in 1-2 sentences.\n\n"
+        f"User: {user}\nGrace: {reply}\n\n"
+        "Respond in JSON: {\"score\": <number>, \"explanation\": \"...\"}"
+    )
+    client = AsyncOpenAI()
+    try:
+        res = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": prompt}]
+        )
+        import json as pyjson
+        # Try to extract JSON from the model's reply
+        text = res.choices[0].message.content
+        # Find the first {...} JSON block in the reply
+        import re
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return pyjson.loads(match.group(0))
+        # fallback: return raw text
+        return {"score": None, "explanation": text}
+    except Exception as e:
+        return {"error": str(e)}
+
 # ---------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------
-async def log_chat(sender: str, user_msg: str, bot_reply: str) -> None:
+
+async def log_chat(sender: str, user_msg: str, bot_reply: str, auto_score: int = None, prompt_version: str = None) -> None:
+    """
+    Log each chat turn with all relevant metadata for future learning and analytics.
+    Also logs conversation metrics and exports top Q&A pairs for fine-tuning.
+    """
     clean_sender = sender.replace("whatsapp:", "")
     log_file = f"logs/{clean_sender}_chat_history.json"
+    state_id = await compute_state_id()
 
+    score = await grade_turn(user_msg, bot_reply)
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "sender": clean_sender,
         "user_message": user_msg,
-        "bot_reply": bot_reply
+        "bot_reply": bot_reply,
+        "auto_score": score,
+        "human_score": None,
+        "state_id": state_id,
+        "prompt_version": prompt_version  # <--- add this line
     }
 
+    # --- Conversation Metrics ---
+    try:
+        # Log order placed
+        if "order placed" in bot_reply.lower():
+            with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["order_placed", clean_sender, 1, datetime.now().isoformat()])
+        # Log refund mentioned
+        if "refund" in user_msg.lower() or "refund" in bot_reply.lower():
+            with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["refund_mentioned", clean_sender, 1, datetime.now().isoformat()])
+        # Log words per turn
+        with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["words_per_turn", clean_sender, len(bot_reply.split()), datetime.now().isoformat()])
+    except Exception as e:
+        logger.error(f"Error logging conversation metrics for {clean_sender}: {e}")
+
+    # --- Export Top Q&A Pairs for Fine-Tuning ---
+    try:
+        if score is not None and score >= 8:
+            with open("logs/top_pairs.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "question": user_msg,
+                    "answer": bot_reply,
+                    "score": score
+                }) + "\n")
+    except Exception as e:
+        logger.error(f"Error exporting top Q&A pair for {clean_sender}: {e}")
+
+    # --- Log Chat Turn ---
     try:
         if os.path.exists(log_file):
             async with aiofiles.open(log_file, "r+", encoding="utf-8") as file:
@@ -301,7 +496,6 @@ async def log_chat(sender: str, user_msg: str, bot_reply: str) -> None:
         else:
             async with aiofiles.open(log_file, "w", encoding="utf-8") as file:
                 await file.write(json.dumps([log_entry], indent=2))
-
         logger.info(f"Logged message for {clean_sender}")
     except PermissionError as e:
         logger.error(f"Permission denied while logging chat for {clean_sender}: {e}")
@@ -321,7 +515,7 @@ def ensure_required_files():
         file_path = os.path.join("config", file)
         if not os.path.exists(file_path):
             with open(file_path, "w") as f:
-                f.write("{}")  # Create an empty JSON file
+                f.write("{}")
             logger.warning(f"Created placeholder for missing file: {file}")
 
 @lru_cache(maxsize=1)

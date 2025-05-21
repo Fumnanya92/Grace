@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 import sqlite3
@@ -77,7 +78,10 @@ class PaymentHandler:
         if await self._is_payment_proof(body):
             return await self._store_payment_proof(sender, body)
 
-        return config.RESPONSES["payment"]["default"]
+        # Use speech_library for fallback canned response
+        with open("config/speech_library.json") as f:
+            speech_library = json.load(f)
+        return speech_library["payment"].get("default", "Thank you for your message. How can I assist you with payments?")
 
     async def process_accountant_message(self, body: str) -> None:
         """
@@ -102,7 +106,9 @@ class PaymentHandler:
             (sender,),
         )
         if await cur.fetchone():
-            return config.RESPONSES["payment"]["pending"]
+            with open("config/speech_library.json") as f:
+                speech_library = json.load(f)
+            return speech_library["payment"]["pending"]
 
         code = "".join(random.choices("0123456789", k=4))
         amount = int(
@@ -121,7 +127,9 @@ class PaymentHandler:
 
         await self._alert_accountant(sender, amount, code)
 
-        return config.RESPONSES["payment"]["instructions"].format(
+        with open("config/speech_library.json") as f:
+            speech_library = json.load(f)
+        return speech_library["payment"]["instructions"].format(
             account_name=config.PAYMENT["account_name"],
             account_number=config.PAYMENT["account_number"],
             bank_name=config.PAYMENT["bank_name"],
@@ -144,9 +152,9 @@ class PaymentHandler:
         logger.info("Sent accountant alert for %s code %s", sender, code)
 
     async def _store_payment_proof(self, sender: str, proof_text: str) -> str:
-        # In a full build you would store the media SID / text –
-        # kept simple here.
-        return config.RESPONSES["payment"]["verification_sent"]
+        with open("config/speech_library.json") as f:
+            speech_library = json.load(f)
+        return speech_library["payment"].get("verification_sent", "Thank you, your payment proof has been received.")
 
     async def _verify_and_acknowledge(self, code: str) -> None:
         db = await self._db()

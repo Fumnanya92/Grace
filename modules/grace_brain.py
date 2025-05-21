@@ -15,12 +15,12 @@ Responsibilities:
 from __future__ import annotations
 import json
 import re
+import random
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
 
 from logging_config import configure_logger
-
 logger = configure_logger("grace_brain")
 
 from modules.utils import (
@@ -67,12 +67,17 @@ class GraceBrain:
         self.tone = _load_json(CONFIG_DIR / "tone.json", default={"style": "friendly"})
         self.fallbacks = _load_json(FALLBACKS_FILE, default={"default_response": "I'm still learning 😊"})
         # Load system prompt once at startup
-        prompt_path = Path("config/system_prompt.txt")
-        if prompt_path.exists():
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                self.system_prompt = f.read()
-        else:
-            self.system_prompt = ""
+        prompt_versions = [
+            "config/system_prompt.txt",
+            "config/system_prompt_v2.txt"
+        ]
+        chosen_prompt = random.choice(prompt_versions)
+        with open(chosen_prompt, "r", encoding="utf-8") as f:
+            self.system_prompt = f.read()
+        logger.info(f"Using prompt: {chosen_prompt}")
+        # Load policies at startup
+        self.policies_content = self._load_policies()
+        self.prompt_version = chosen_prompt
 
     # -----------------------------------------------------------------
     # Canned Responses
@@ -156,27 +161,38 @@ class GraceBrain:
     # -----------------------------------------------------------------
     async def build_prompt(self, chat_history: str, user_message: str) -> str:
         catalog = await self.get_catalog()
-        catalog_intro = self._build_catalog_intro(catalog)
+        show_catalog = any(k in user_message.lower() for k in ("show", "price", "catalog", "product", "dress", "set"))
+        catalog_intro = self._build_catalog_intro(catalog) if show_catalog else ""
         keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
         business_info = self._build_business_info()
         business_name = self.config.get("business_name", "Our Company")
         prompt_template = self.system_prompt
-        system_prompt = prompt_template.format(BUSINESS_NAME=business_name)
+        system_prompt = prompt_template.format(
+            BUSINESS_NAME=business_name,
+            POLICIES_CONTENT=self.policies_content,
+        )
 
-        return (
-            f"{system_prompt}\n"
-            f"{business_info}\n\n"
+        prompt_parts = [
+            f"{system_prompt}\n",
+            f"{business_info}\n\n",
             "Instructions:\n"
             "- Do not repeat greetings if you have already greeted the user in this conversation.\n"
             "- If the user asks about Instagram, payment, or business hours, always answer with the exact info from above.\n"
             "- If the user asks for a product, suggest from the catalog if possible before using your own words.\n"
-            f"Recent conversation:\n{chat_history}\n\n"
+            f"Recent conversation:\n{chat_history}\n\n",
             f"User: {user_message}\n\n"
-            f"Product highlights:\n{catalog_intro}\n\n"
+        ]
+
+        if catalog_intro:
+            prompt_parts.append(f"Product highlights:\n{catalog_intro}\n\n")
+
+        prompt_parts.append(
             "Respond conversationally, nudge toward purchase, "
             "**keep replies under 40 words unless sending item details**, "
             f"and tag your reply with exactly one of the following keys: {keys}\n"
         )
+
+        return "".join(prompt_parts)
 
     def _build_catalog_intro(self, catalog: List[Dict[str, Any]]) -> str:
         """Build a catalog preview for the prompt."""
@@ -199,3 +215,32 @@ class GraceBrain:
             update_speech_library(intent, user_phrase, ai_response, confidence=0.5)
         except Exception as exc:
             logger.error("Failed to update speech library: %s", exc)
+
+    # -----------------------------------------------------------------
+    # Policies
+    # -----------------------------------------------------------------
+    def _load_policies(self) -> str:
+        """Load company policies from config/policies.txt."""
+        policies_path = Path("config/policies.txt")
+        if policies_path.exists():
+            try:
+                with open(policies_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception as exc:
+                logger.error("Failed to load policies.txt: %s", exc)
+                return ""
+        else:
+            logger.warning("policies.txt not found in config directory.")
+            return ""
+
+    def reload_policies(self):
+        """Reload policies at runtime if needed."""
+        self.policies_content = self._load_policies()
+
+    def get_system_prompt(self) -> str:
+        """Return the system prompt with the current company policies included."""
+        return (
+            f"{self.system_prompt}\n"
+            f"**Current Company Policies:**\n"
+            f"{self.policies_content}\n"
+        )

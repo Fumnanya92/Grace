@@ -213,6 +213,20 @@ This feature is only available on premium plans because it involves:
 - **Live Persona Updates:**  
   Admins can upload a new system prompt (persona/instructions) via the dashboard or API. Grace reloads her persona instantly—no server restart required.
 
+### 🤖 Retrieval-Augmented Generation (RAG) with Human-in-the-Loop
+
+- **Curated Knowledge Base:**  
+  Grace uses a retrieval system powered by FAISS and a gold set of human-reviewed Q&A pairs (`good_pairs.jsonl`). Admins can review, edit, and approve pairs before they are used for retrieval, ensuring only high-quality, business-aligned responses are served.
+- **Continuous Improvement:**  
+  New conversations are logged, and high-quality exchanges can be added to the retrieval memory after human review, making Grace smarter over time.
+
+### 🏆 Auto-Grading and Quality Control
+
+- **Automated Scoring:**  
+  Each assistant reply can be auto-graded for accuracy, tone, and goal progress using an LLM-based grader, with results logged for further review.
+- **Streamlit Review UI:**  
+  Admins can review, edit, approve, or reject retrieval pairs via a simple web interface, ensuring only the best responses are used.
+
 ---
 
 ## Roadmap & Phases

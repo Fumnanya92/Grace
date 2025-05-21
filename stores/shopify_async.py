@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple, AsyncGenerator
@@ -30,7 +31,7 @@ from config import config  # central secrets
 # Config / constants
 # ---------------------------------------------------------------------------
 PRODUCT_CACHE_TTL = 300          # seconds
-FUZZY_THRESHOLD   = 70           # fuzzywuzzy score
+FUZZY_THRESHOLD   = 60           # fuzzywuzzy score
 RATE_LIMIT_SLEEP  = 0.6          # Shopify allows 2 rps
 
 SHOPIFY_API_VERSION = config.SHOPIFY.get("api_version", "2025-04")
@@ -171,23 +172,49 @@ async def get_shopify_products(force_refresh: bool = False) -> List[Dict[str, An
 # Fuzzy lookup helpers (used by LangChain tool)
 # ---------------------------------------------------------------------------
 def _fuzzy_match_product(name: str, products: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Return best product dict or None."""
-    name = name.lower()
+    """
+    Improved fuzzy matching: match against title and handle, fallback to substring.
+    """
+    name = name.lower().strip()
     best: Tuple[int, Dict[str, Any]] | None = None
     for p in products:
-        score = fuzz.token_set_ratio(name, p["title"].lower())
+        title = p["title"].lower()
+        handle = p.get("handle", "").replace("-", " ").lower()
+        score_title = fuzz.token_set_ratio(name, title)
+        score_handle = fuzz.token_set_ratio(name, handle)
+        logger.debug(f"Fuzzy score for '{name}' vs '{title}': {score_title}, handle: {score_handle}")
+        score = max(score_title, score_handle)
         if score >= FUZZY_THRESHOLD and (best is None or score > best[0]):
             best = (score, p)
+    # Fallback: substring match if no fuzzy match
+    if not best:
+        for p in products:
+            if name in p["title"].lower() or name in p.get("handle", "").replace("-", " ").lower():
+                return p
+    # Fallback: partial word match
+    if not best:
+        for p in products:
+            if any(word in p["title"].lower() for word in name.split()):
+                return p
     return best[1] if best else None
 
 
 def _format_product(p: Dict[str, Any]) -> str:
+    """
+    Format product details, including image URL if available.
+    """
+    image_url = None
+    if p.get("images"):
+        image_url = p["images"][0].get("src")
     variants = p.get("variants", [])
     price = variants[0].get("price", "N/A") if variants else "N/A"
     stock = variants[0].get("inventory_quantity", 0) if variants else 0
     link  = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/products/{p['handle']}"
     body  = BeautifulSoup(p.get("body_html", ""), "html.parser").get_text()[:200]
-    parts = [
+    parts = []
+    if image_url:
+        parts.append(image_url)
+    parts += [
         f"✨ {p['title']} ✨",
         f"💵 Price: {price}",
         f"📦 {'In stock' if stock > 0 else 'Out of stock'} ({stock})",
@@ -197,28 +224,67 @@ def _format_product(p: Dict[str, Any]) -> str:
     return "\n".join(filter(None, parts))
 
 
-def format_product_response(product: Dict[str, Any]) -> str:
+def format_product_response(product: dict) -> str:
     """
     Format product details into a human-readable string.
     """
-    return _format_product(product)
+    image_url = product.get("image_url")
+    lines = []
+    if image_url:
+        lines.append(image_url)
+    return "\n".join(lines)
 
 
 def is_product_query(message: str) -> bool:
-    kws = ["have", "stock", "carry", "sell", "price", "available", "product", "dress", "shirt"]
-    return any(k in message.lower() for k in kws)
+    """
+    Robustly determine if a message is a product query using keywords, regex, and fuzzy matching.
+    """
+    message = message.lower().strip()
+    # Direct keyword check
+    kws = [
+        "have", "stock", "carry", "sell", "price", "available", "product", "dress", "shirt",
+        "show", "set", "piece", "outfit", "want", "get", "buy"
+    ]
+    if any(k in message for k in kws):
+        return True
+
+    # Regex for common product query patterns
+    patterns = [
+        r"\bdo you have\b",
+        r"\bshow me\b",
+        r"\bi want\b",
+        r"\bcan i get\b",
+        r"\bhave you got\b",
+        r"\bwhat(?:'s| is) the price\b",
+        r"\bhow much\b",
+        r"\bavailable\b",
+        r"\bin stock\b",
+    ]
+    if any(re.search(pat, message) for pat in patterns):
+        return True
+
+    # Fuzzy match: if message is close to any keyword (score >= 80)
+    for k in kws:
+        if fuzz.partial_ratio(message, k) >= 80:
+            return True
+
+    return False
 
 
 def _extract_query_name(question: str) -> str:
     """
-    Extract the product name from the question.
+    Extract the product name from the question, removing common prefixes and polite words,
+    but do NOT remove single-letter words like 'a' or 'an' that may be part of product names.
     """
-    words = question.lower().split()
-    keyword_pos = max((i for i, w in enumerate(words) if w in {"have", "sell", "stock", "carry"}), default=-1)
-    query_name = " ".join(words[keyword_pos + 1:]) if keyword_pos != -1 else question
-    # Remove unnecessary words like "in stock"
-    query_name = query_name.replace("in stock", "").strip()
-    return query_name
+    question = question.lower()
+    # Remove common leading phrases
+    for prefix in ["do you have", "show me", "i want", "can i get", "have you got"]:
+        if question.startswith(prefix):
+            question = question[len(prefix):]
+    # Remove only truly unnecessary words
+    for word in ["in stock", "please", "the"]:
+        question = question.replace(word, "")
+    return question.strip()
 
 
 async def get_product_details(question: str) -> str:
@@ -250,7 +316,7 @@ async def get_product_details(question: str) -> str:
         logger.warning("No matching product found for query: %s", query_name)
         return f"Couldn’t find anything similar to “{query_name}”."
 
-    # Format and return the product details
+    # Format and return the product details (with image URL if available)
     formatted_product = _format_product(match)
     logger.info("Formatted product details: %s", formatted_product)
     return formatted_product

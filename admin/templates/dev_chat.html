@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grace Dev Dashboard</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <style>
+    /* Selection highlight */
+    ::selection {
+      background: rgba(99,102,241,0.18);
+      border-radius: 4px;
+    }
+    ::-moz-selection {
+      background: rgba(99,102,241,0.18);
+      border-radius: 4px;
+    }
+    .section-note {
+      @apply text-sm italic text-gray-600 dark:text-gray-400 mb-4;
+    }
+    .scrollbar::-webkit-scrollbar {width: 8px;height: 8px}
+    .scrollbar::-webkit-scrollbar-thumb {background:#9ca3af;border-radius:4px}
+    .scrollbar.dark::-webkit-scrollbar-thumb {background:#4b5563}
+    /* Sidebar retract styles */
+    .sidebar-collapsed { width: 3.5rem !important; transition: width 0.2s; }
+    .sidebar-collapsed .sidebar-label { display: none !important; }
+    .sidebar-collapsed .tab-btn { justify-content: center; }
+    .sidebar-collapsed .sidebar-toggle { left: 1.25rem; }
+    .sidebar-toggle {
+      position: absolute;
+      top: 1.25rem;
+      right: -1.25rem;
+      z-index: 10;
+      background: #fff;
+      border-radius: 9999px;
+      box-shadow: 0 2px 8px 0 rgba(99,102,241,0.10);
+      border: 1px solid #e5e7eb;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: right 0.2s;
+    }
+    .dark .sidebar-toggle { background: #27272a; border-color: #3f3f46; }
+  </style>
+</head>
+<body class="h-full bg-gray-100 dark:bg-zinc-900 text-gray-900 dark:text-gray-100">
+  <div class="flex h-screen relative">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="relative w-60 bg-white dark:bg-zinc-800 border-r dark:border-zinc-700 p-5 space-y-4 overflow-y-auto transition-all duration-200">
+      <button class="sidebar-toggle" id="sidebarToggle" title="Toggle menu">
+        <svg id="sidebarToggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path id="sidebarTogglePath" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5" />
+        </svg>
+      </button>
+      <h2 class="text-lg font-bold text-indigo-600 dark:text-indigo-400 sidebar-label">Grace Dev Panel</h2>
+      <nav class="flex flex-col gap-2">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('chat')">
+          <span>📥</span> <span class="sidebar-label">Chat Tester</span>
+        </button>
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('playground')">
+          <span>🧪</span> <span class="sidebar-label">Prompt Playground</span>
+        </button>
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('library')">
+          <span>📚</span> <span class="sidebar-label">Speech Library</span>
+        </button>
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('intent')">
+          <span>🎯</span> <span class="sidebar-label">Intent Trainer</span>
+        </button>
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('tone')">
+          <span>🎭</span> <span class="sidebar-label">Tone Tuner</span>
+        </button>
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('score')">
+          <span>📊</span> <span class="sidebar-label">Scoring Assistant</span>
+        </button>
+      </nav>
+      <button onclick="toggleDark()" class="mt-10 text-xs text-gray-500 hover:text-indigo-500 sidebar-label">🌓 Toggle Theme</button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-6 space-y-4">
+      <!-- Chat Tester -->
+      <section id="tab-chat" class="tab-section">
+        <h3 class="text-xl font-semibold mb-2">📥 Chat Tester</h3>
+        <p class="section-note">Test Grace's responses by entering a message below. Select a context if needed.</p>
+        <div class="w-full max-w-3xl h-[600px] bg-white dark:bg-zinc-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden mx-auto">
+          <header class="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-indigo-600 to-fuchsia-500 dark:from-fuchsia-600 dark:to-indigo-500">
+            <h1 class="text-xl sm:text-2xl font-semibold text-white flex items-center gap-2">
+              💬 Grace Dev Assistant
+            </h1>
+            <!-- THEME TOGGLE -->
+            <button id="themeToggle" class="text-white/80 hover:text-white transition" title="Toggle dark mode" type="button">
+              <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05L4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" /></svg>
+              <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 116.707 2.707a7 7 0 1010.586 10.586z"/></svg>
+            </button>
+          </header>
+          <!-- CHAT BOX -->
+          <div id="chat" class="flex-1 overflow-y-auto scrollbar p-6 space-y-4 text-gray-800 dark:text-gray-200 bg-white dark:bg-zinc-800"></div>
+          <!-- INPUT -->
+          <form onsubmit="sendQuery(event)" class="border-t border-gray-200 dark:border-zinc-700 p-4 bg-gray-50 dark:bg-zinc-900 flex flex-col sm:flex-row gap-2">
+            <select id="context" class="sm:w-40 px-3 py-2 rounded-xl border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-gray-200">
+              <option value="none">No Context</option>
+              <option value="catalog">Catalog</option>
+              <option value="config">Config</option>
+              <option value="tone">Tone</option>
+              <option value="chatlog">Chat Log</option>
+            </select>
+            <input id="query" type="text" placeholder="Ask Grace's Dev Assistant…" class="flex-1 px-4 py-2 rounded-xl border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-gray-200" autocomplete="off" />
+            <button id="sendBtn" type="submit" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white px-5 py-2 rounded-xl text-sm shadow-md transition disabled:cursor-not-allowed">
+              ▶ Send
+            </button>
+          </form>
+          <footer class="bg-gray-50 dark:bg-zinc-900 text-center text-xs text-gray-500 dark:text-gray-400 py-2">Grace Dev Panel — Powered by OpenAI GPT‑4o</footer>
+        </div>
+      </section>
+
+      <!-- Prompt Playground -->
+      <section id="tab-playground" class="tab-section hidden">
+        <h3 class="text-xl font-semibold">🧪 Prompt Playground</h3>
+        <p class="section-note">Compare how two different system prompts affect Grace’s reply to the same message. Useful for tone or logic experiments. Below each output, you’ll see GPT-generated quality feedback.</p>
+        <form onsubmit="runPromptPlayground(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium">System Prompt A</label>
+            <textarea id="promptA" class="w-full border rounded p-2 dark:bg-zinc-800 h-40" placeholder="Enter first prompt variation..."></textarea>
+          </div>
+          <div>
+            <label class="text-sm font-medium">System Prompt B</label>
+            <textarea id="promptB" class="w-full border rounded p-2 dark:bg-zinc-800 h-40" placeholder="Enter second prompt variation..."></textarea>
+          </div>
+          <div class="md:col-span-2">
+            <label class="text-sm font-medium">User Message</label>
+            <input id="userMessage" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" placeholder="Enter the message to test with both prompts..." />
+          </div>
+          <div class="md:col-span-2 text-right">
+            <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Compare ▶</button>
+          </div>
+        </form>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <h4 class="font-medium">Response A</h4>
+            <pre id="resultA" class="p-3 border rounded dark:bg-zinc-800 whitespace-pre-wrap"></pre>
+            <p class="text-xs mt-1 text-indigo-500" id="scoreA"></p>
+          </div>
+          <div>
+            <h4 class="font-medium">Response B</h4>
+            <pre id="resultB" class="p-3 border rounded dark:bg-zinc-800 whitespace-pre-wrap"></pre>
+            <p class="text-xs mt-1 text-indigo-500" id="scoreB"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Speech Library -->
+      <section id="tab-library" class="tab-section hidden">
+        <h3 class="text-xl font-semibold">📚 Speech Library Editor</h3>
+        <p class="section-note">Add or edit phrases and responses that Grace can use during interactions.</p>
+        <div class="mb-4">
+          <form onsubmit="addLibraryEntry(event)" class="space-y-2">
+            <input id="libPhrase" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" placeholder="Phrase (user input)" />
+            <textarea id="libResponse" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" placeholder="Response (Grace's reply)"></textarea>
+            <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add Entry</button>
+          </form>
+        </div>
+        <ul id="speechLibraryList" class="space-y-2 text-sm"></ul>
+      </section>
+
+      <!-- Intent Trainer -->
+      <section id="tab-intent" class="tab-section hidden">
+        <h3 class="text-xl font-semibold">🎯 Intent Trainer</h3>
+        <p class="section-note">Paste a user message below and check what intent Grace detects. You can add new examples to improve future recognition.</p>
+        <form onsubmit="runIntentTest(event)" class="space-y-3">
+          <input id="intentInput" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" placeholder="Enter a user message to classify..." />
+          <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Detect Intent</button>
+        </form>
+        <div class="mt-4">
+          <strong>Detected Intent:</strong>
+          <p id="intentResult" class="mt-1 text-indigo-400"></p>
+        </div>
+      </section>
+
+      <!-- Tone Tuner -->
+      <section id="tab-tone" class="tab-section hidden">
+        <h3 class="text-xl font-semibold">🎭 Tone Tuner</h3>
+        <p class="section-note">Paste any message and see how Grace would rephrase it in different tones (friendly, formal, playful, professional).</p>
+        <form onsubmit="runToneTuning(event)" class="space-y-3">
+          <textarea id="toneInput" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" rows="3" placeholder="Enter a message to rephrase..."></textarea>
+          <button class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Generate Tones</button>
+        </form>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" id="toneOutput"></div>
+      </section>
+
+      <!-- Scoring Assistant -->
+      <section id="tab-score" class="tab-section hidden">
+        <h3 class="text-xl font-semibold">📊 Scoring Assistant</h3>
+        <p class="section-note">Score Grace's reply for clarity, helpfulness, tone, and conversion potential.</p>
+        <form onsubmit="runScoringAssistant(event)" class="space-y-3">
+          <textarea id="scoreUser" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" rows="2" placeholder="Paste user message..."></textarea>
+          <textarea id="scoreBot" class="w-full border rounded px-3 py-2 dark:bg-zinc-800" rows="2" placeholder="Paste Grace's reply..."></textarea>
+          <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Score</button>
+        </form>
+        <div id="scoreResult" class="mt-4 p-4 border rounded dark:bg-zinc-800 whitespace-pre-wrap text-sm"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // Sidebar retract logic
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebarToggleIcon = document.getElementById('sidebarToggleIcon');
+    let sidebarCollapsed = false;
+    sidebarToggle.addEventListener('click', () => {
+      sidebarCollapsed = !sidebarCollapsed;
+      sidebar.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+      // Animate icon
+      sidebarToggleIcon.innerHTML = sidebarCollapsed
+        ? `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />`
+        : `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5" />`;
+    });
+
+    // Sidebar Tab Logic
+    function showTab(id) {
+      document.querySelectorAll('.tab-section').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${id}`).classList.remove('hidden');
+      if (id === 'library') loadSpeechLibrary();
+    }
+
+    // Dark Mode Toggle
+    function toggleDark() {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    }
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+
+    // --- Chat Tester (original chat logic)
+    // Theme toggle for chat header
+    const htmlEl = document.documentElement;
+    window.addEventListener('DOMContentLoaded', () => {
+      const sunIcon = document.getElementById('sunIcon');
+      const moonIcon = document.getElementById('moonIcon');
+      const toggleTheme = () => {
+        const dark = htmlEl.classList.toggle('dark');
+        localStorage.setItem('graceTheme', dark ? 'dark' : 'light');
+        sunIcon.classList.toggle('hidden', !dark);
+        moonIcon.classList.toggle('hidden', dark);
+        document.getElementById('chat').classList.toggle('dark');
+      };
+      document.getElementById('themeToggle').onclick = toggleTheme;
+      if (localStorage.getItem('graceTheme') === 'dark') toggleTheme();
+    });
+
+    async function sendQuery(event) {
+      event.preventDefault();
+      const queryEl   = document.getElementById('query');
+      const contextEl = document.getElementById('context');
+      const chatBox   = document.getElementById('chat');
+      const sendBtn   = document.getElementById('sendBtn');
+
+      const text = queryEl.value.trim();
+      if (!text) return;
+
+      addMessage('user', text);
+      queryEl.value = '';
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch('/dev/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query: text, context_type: contextEl.value })
+        });
+        const data  = await res.json();
+        const reply = data.result || data.error || 'Error';
+        addMessage('assistant', reply, text, reply);
+      } catch (err) {
+        console.error(err);
+        addMessage('assistant', 'Network error');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    function addMessage(role, content, rawQuestion = '', rawAnswer = '') {
+      const chatBox = document.getElementById('chat');
+      const isUser = role === 'user';
+      const bubble = document.createElement('div');
+      bubble.className = `flex ${isUser ? 'justify-end' : 'justify-start'} group`;
+      const inner = document.createElement('div');
+      inner.className = `${isUser ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-gray-200 dark:bg-zinc-700 text-gray-900 dark:text-gray-100 rounded-bl-none'} rounded-2xl px-4 py-2 max-w-[80%] whitespace-pre-wrap text-sm shadow-lg`;
+      inner.textContent = content;
+      if (!isUser) {
+        // save button
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'opacity-0 group-hover:opacity-100 transition-opacity text-xs mt-2 bg-indigo-100 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-200 px-2 py-1 rounded hover:bg-indigo-200 dark:hover:bg-indigo-700';
+        saveBtn.textContent = '💾 Save to library';
+        saveBtn.onclick = () => saveToLibrary(rawQuestion, rawAnswer || content);
+        inner.appendChild(document.createElement('br'));
+        inner.appendChild(saveBtn);
+      }
+      bubble.appendChild(inner);
+      chatBox.appendChild(bubble);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function saveToLibrary(phrase, response) {
+      if (!phrase || !response) return alert('Missing data');
+      try {
+        const res = await fetch('/admin/save_speech_library', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phrase, response })
+        });
+        const data = await res.json();
+        alert(data.message || 'Saved ✓');
+      } catch (err) {
+        alert('Save failed');
+        console.error(err);
+      }
+    }
+
+    // --- Prompt Playground
+    async function runPromptPlayground(event) {
+      event.preventDefault();
+      const promptA = document.getElementById("promptA").value;
+      const promptB = document.getElementById("promptB").value;
+      const message = document.getElementById("userMessage").value;
+      document.getElementById("resultA").innerText = "⏳ Running A...";
+      document.getElementById("resultB").innerText = "⏳ Running B...";
+      document.getElementById("scoreA").innerText = "";
+      document.getElementById("scoreB").innerText = "";
+      try {
+        const [resA, resB] = await Promise.all([
+          fetch("/dev/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: message, context_type: "none", model: "gpt-4o", prompt_override: promptA })
+          }),
+          fetch("/dev/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: message, context_type: "none", model: "gpt-4o", prompt_override: promptB })
+          })
+        ]);
+        const [dataA, dataB] = await Promise.all([resA.json(), resB.json()]);
+        const replyA = dataA.result || dataA.error || "No response";
+        const replyB = dataB.result || dataB.error || "No response";
+        document.getElementById("resultA").innerText = replyA;
+        document.getElementById("resultB").innerText = replyB;
+        gradeReply("A", message, replyA);
+        gradeReply("B", message, replyB);
+      } catch (err) {
+        document.getElementById("resultA").innerText = "Error";
+        document.getElementById("resultB").innerText = "Error";
+        console.error(err);
+      }
+    }
+
+    // --- Speech Library
+    async function loadSpeechLibrary() {
+      const list = document.getElementById("speechLibraryList");
+      list.innerHTML = "Loading...";
+      try {
+        const res = await fetch("/admin/get_speech_library");
+        const data = await res.json();
+        list.innerHTML = data.training_data.map((entry, i) => `
+          <li class="border p-3 rounded dark:bg-zinc-800">
+            <strong>Phrase:</strong> ${entry.phrase}<br/>
+            <strong>Response:</strong> ${entry.response}<br/>
+            <button onclick="deleteLibraryEntry(${i})" class="mt-2 text-xs text-red-600 hover:underline">Delete</button>
+          </li>`).join("\n");
+      } catch (err) {
+        list.innerHTML = "Error loading library.";
+        console.error(err);
+      }
+    }
+
+    async function addLibraryEntry(event) {
+      event.preventDefault();
+      const phrase = document.getElementById("libPhrase").value.trim();
+      const response = document.getElementById("libResponse").value.trim();
+      if (!phrase || !response) return alert("Both fields required");
+      try {
+        const res = await fetch("/admin/save_speech_library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phrase, response })
+        });
+        const data = await res.json();
+        alert(data.message || "Saved!");
+        document.getElementById("libPhrase").value = "";
+        document.getElementById("libResponse").value = "";
+        loadSpeechLibrary();
+      } catch (err) {
+        alert("Error saving entry.");
+        console.error(err);
+      }
+    }
+
+    async function deleteLibraryEntry(index) {
+      if (!confirm("Delete this entry?")) return;
+      try {
+        const res = await fetch(`/admin/delete_speech_library/${index}`, { method: "DELETE" });
+        const data = await res.json();
+        alert(data.message || "Deleted");
+        loadSpeechLibrary();
+      } catch (err) {
+        alert("Error deleting entry.");
+        console.error(err);
+      }
+    }
+
+    // --- Playground grading
+    async function gradeReply(label, user, reply) {
+      try {
+        const res = await fetch("/dev/grade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user, reply })
+        });
+        const data = await res.json();
+        document.getElementById(`score${label}`).innerText = `⭐ Score: ${data.score}/10 | ${data.explanation || ''}`;
+      } catch (err) {
+        console.error("Scoring failed:", err);
+      }
+    }
+
+    // --- Intent Trainer
+    async function runIntentTest(event) {
+      event.preventDefault();
+      const msg = document.getElementById("intentInput").value;
+      const out = document.getElementById("intentResult");
+      out.innerText = "Detecting...";
+      try {
+        const res = await fetch("/dev/intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        out.innerText = data.intent || "Unknown";
+      } catch (err) {
+        out.innerText = "Error detecting intent.";
+      }
+    }
+
+    // --- Tone Tuner
+    async function runToneTuning(event) {
+      event.preventDefault();
+      const input = document.getElementById("toneInput").value;
+      const out = document.getElementById("toneOutput");
+      out.innerHTML = "<p class='text-sm italic'>Generating tone variations...</p>";
+      try {
+        const res = await fetch("/dev/tone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: input })
+        });
+        const data = await res.json();
+        out.innerHTML = Object.entries(data).map(([tone, text]) => `
+          <div class="border p-3 rounded dark:bg-zinc-800">
+            <strong class="text-indigo-500">${tone}</strong>
+            <p class="mt-1 whitespace-pre-wrap text-sm">${text}</p>
+          </div>`).join("\n");
+      } catch (err) {
+        out.innerHTML = "<p class='text-red-500'>Failed to generate tones.</p>";
+        console.error(err);
+      }
+    }
+
+    // --- Scoring Assistant
+    async function runScoringAssistant(event) {
+      event.preventDefault();
+      const user = document.getElementById("scoreUser").value;
+      const bot = document.getElementById("scoreBot").value;
+      const out = document.getElementById("scoreResult");
+      out.innerText = "Scoring...";
+      try {
+        const res = await fetch("/dev/grade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user, reply: bot })
+        });
+        const data = await res.json();
+        if (data.error) {
+          out.innerText = "Error: " + data.error;
+        } else {
+          out.innerHTML = `
+            <strong>Score:</strong> <span class="text-indigo-500">${data.score}/10</span><br>
+            <strong>Explanation:</strong> <span>${data.explanation || ''}</span>
+          `;
+        }
+      } catch (err) {
+        out.innerText = "Failed to score.";
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -53,6 +53,28 @@
       transition: right 0.2s;
     }
     .dark .sidebar-toggle { background: #27272a; border-color: #3f3f46; }
+    .tab-btn {
+      transition: background 0.18s, font-weight 0.18s, color 0.18s, box-shadow 0.18s;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      font-weight: 500;
+      outline: none;
+      background: none;
+      border: none;
+    }
+    .tab-btn.selected,
+    .tab-btn:focus-visible {
+      background: rgba(99,102,241,0.12);
+      color: #4f46e5 !important;
+      font-weight: 700;
+      box-shadow: 0 2px 8px 0 rgba(99,102,241,0.08);
+      outline: none;
+    }
+    .dark .tab-btn.selected,
+    .dark .tab-btn:focus-visible {
+      background: rgba(129,140,248,0.18);
+      color: #a5b4fc !important;
+    }
   </style>
 </head>
 <body class="h-full bg-gray-100 dark:bg-zinc-900 text-gray-900 dark:text-gray-100">
@@ -65,23 +87,23 @@
         </svg>
       </button>
       <h2 class="text-lg font-bold text-indigo-600 dark:text-indigo-400 sidebar-label">Grace Dev Panel</h2>
-      <nav class="flex flex-col gap-2">
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('chat')">
+      <nav class="flex flex-col gap-2" id="sidebarNav">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="chat" onclick="showTab('chat')">
           <span>📥</span> <span class="sidebar-label">Chat Tester</span>
         </button>
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('playground')">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="playground" onclick="showTab('playground')">
           <span>🧪</span> <span class="sidebar-label">Prompt Playground</span>
         </button>
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('library')">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="library" onclick="showTab('library')">
           <span>📚</span> <span class="sidebar-label">Speech Library</span>
         </button>
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('intent')">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="intent" onclick="showTab('intent')">
           <span>🎯</span> <span class="sidebar-label">Intent Trainer</span>
         </button>
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('tone')">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="tone" onclick="showTab('tone')">
           <span>🎭</span> <span class="sidebar-label">Tone Tuner</span>
         </button>
-        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" onclick="showTab('score')">
+        <button class="tab-btn text-left flex items-center gap-2 hover:text-indigo-500" data-tab="score" onclick="showTab('score')">
           <span>📊</span> <span class="sidebar-label">Scoring Assistant</span>
         </button>
       </nav>
@@ -115,6 +137,11 @@
               <option value="config">Config</option>
               <option value="tone">Tone</option>
               <option value="chatlog">Chat Log</option>
+            </select>
+            <select id="model" class="sm:w-32 px-3 py-2 rounded-xl border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm dark:text-gray-200">
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-4">gpt-4</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
             </select>
             <input id="query" type="text" placeholder="Ask Grace's Dev Assistant…" class="flex-1 px-4 py-2 rounded-xl border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-gray-200" autocomplete="off" />
             <button id="sendBtn" type="submit" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white px-5 py-2 rounded-xl text-sm shadow-md transition disabled:cursor-not-allowed">
@@ -232,7 +259,16 @@
     function showTab(id) {
       document.querySelectorAll('.tab-section').forEach(el => el.classList.add('hidden'));
       document.getElementById(`tab-${id}`).classList.remove('hidden');
+      setActiveTab(id);
       if (id === 'library') loadSpeechLibrary();
+    }
+
+    // Animated menu selection
+    function setActiveTab(tab) {
+      document.querySelectorAll('#sidebarNav .tab-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.tab === tab) btn.classList.add('selected');
+      });
     }
 
     // Dark Mode Toggle
@@ -265,6 +301,7 @@
       event.preventDefault();
       const queryEl   = document.getElementById('query');
       const contextEl = document.getElementById('context');
+      const modelEl   = document.getElementById('model');
       const chatBox   = document.getElementById('chat');
       const sendBtn   = document.getElementById('sendBtn');
 
@@ -279,7 +316,7 @@
         const res = await fetch('/dev/chat', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ query: text, context_type: contextEl.value })
+          body: JSON.stringify({ query: text, context_type: contextEl.value, model: modelEl.value })
         });
         const data  = await res.json();
         const reply = data.result || data.error || 'Error';

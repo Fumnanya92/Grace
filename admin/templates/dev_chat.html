@@ -19,7 +19,13 @@
       border-radius: 4px;
     }
     .section-note {
-      @apply text-sm italic text-gray-600 dark:text-gray-400 mb-4;
+        font-size: 0.875rem; /* text-sm */
+        font-style: italic;
+        color: #4b5563; /* text-gray-600 */
+        margin-bottom: 1rem; /* mb-4 */
+      }
+      .dark .section-note {
+        color: #a1a1aa; /* text-gray-400 */
     }
     .scrollbar::-webkit-scrollbar {width: 8px;height: 8px}
     .scrollbar::-webkit-scrollbar-thumb {background:#9ca3af;border-radius:4px}

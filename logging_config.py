@@ -22,6 +22,11 @@ def configure_logger(module_name: str, log_dir: str = "logs", max_bytes: int = 1
 
     # Rotating file handler
     log_file = os.path.join(log_dir, f"{module_name}.log")
+
+    # Wipe log file clean on initialization
+    with open(log_file, "w", encoding="utf-8"):
+        pass
+
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=max_bytes,
@@ -43,8 +48,11 @@ def configure_logger(module_name: str, log_dir: str = "logs", max_bytes: int = 1
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
-    if not logger.handlers:
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
+    # Remove existing handlers to avoid duplicate logs
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
     return logger

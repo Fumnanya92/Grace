@@ -22,11 +22,7 @@ from openai import AsyncOpenAI
 from pathlib import Path
 from stores.shopify_async import get_products_for_image_matching
 from modules.shared import image_processor, s3_service
-import hashlib
 import csv
-import aiofiles
-import json
-from fastapi import Request
 
 # ---------------------------------------------------------------------
 # Models
@@ -39,9 +35,9 @@ class ShopifyAskRequest(BaseModel):
 
 class DevChatRequest(BaseModel):
     query: str
-    context_type: Optional[str] = "none"  # "catalog", "config", "tone", "chatlog", or "none"
+    context_type: Optional[str] = "none"
     model: str = "gpt-4o"
-    prompt_override: Optional[str] = None  # <-- add this field
+    prompt_override: Optional[str] = None
 
 # ---------------------------------------------------------------------
 # Imports for Modules
@@ -55,6 +51,7 @@ from modules.shopify_agent import agent
 from config import config
 from logging_config import configure_logger
 from init_db import init_db
+from admin.homepage import router as homepage_router
 
 # ---------------------------------------------------------------------
 # Initialization
@@ -68,10 +65,9 @@ conf.get_default().auth_token = config.APP["ngrok_auth_token"]
 
 # Initialize services
 payment_handler = PaymentHandler()
+responses = BotResponses()
 
-responses = BotResponses()  # Single instance for reuse
-
-if config.APP["debug"]:
+if config.APP.get("debug"):
     logger.info("Debug mode enabled")
 
 # ---------------------------------------------------------------------
@@ -85,11 +81,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(shopify_router)
+app.include_router(homepage_router)
 
 # Define the base directory and config directory
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_DIR = BASE_DIR / "config"
-CONFIG_DIR.mkdir(exist_ok=True)  # Ensure the 'config' directory exists
+CONFIG_DIR.mkdir(exist_ok=True)
 
 # Mount the 'config' directory as static files
 app.mount("/config", StaticFiles(directory=str(CONFIG_DIR)), name="config")
@@ -100,7 +97,7 @@ templates = Jinja2Templates(directory="admin/templates")
 # ---------------------------------------------------------------------
 # Startup and Shutdown
 # ---------------------------------------------------------------------
-refresh_task: asyncio.Task | None = None
+refresh_task: Optional[asyncio.Task] = None
 
 async def startup():
     logger.info("Starting Grace...")
@@ -109,16 +106,13 @@ async def startup():
     refresh_task = asyncio.create_task(refresh_cached_images())
     await start_ngrok()
     init_db()
-    await payment_handler._ensure_tables()  # Ensure payment database tables exist
-
-    await image_processor.initialize()  # Use the shared instance!
+    await payment_handler._ensure_tables()
+    await image_processor.initialize()
     shopify_products = await get_products_for_image_matching()
     await image_processor.load_external_catalog(shopify_products)
 
 async def shutdown():
     logger.info("Gracefully shutting down Grace.")
-
-    # 1. stop refresh task
     global refresh_task
     if refresh_task and not refresh_task.cancelled():
         refresh_task.cancel()
@@ -126,8 +120,6 @@ async def shutdown():
             await refresh_task
         except asyncio.CancelledError:
             logger.debug("refresh_cached_images task cancelled")
-
-    # 2. kill ngrok
     try:
         ngrok.kill()
         logger.debug("Ngrok process killed successfully.")
@@ -170,12 +162,12 @@ async def handle_webhook(
             media_types.append(mtype)
 
     try:
-        # Check if the sender is the accountant
+        # Accountant check
         if sender == config.BUSINESS_RULES.get("accountant_contact"):
             await payment_handler.process_accountant_message(message)
             return Response(content="ok", media_type="text/plain")
 
-        # Check if the message is payment-related
+        # Payment-related message
         if "payment" in message.lower() or "deposit" in message.lower():
             reply = await payment_handler.process_user_message(sender, message)
             twilio_resp = MessagingResponse()
@@ -192,18 +184,15 @@ async def handle_webhook(
             for url, mtype in zip(media_urls, media_types):
                 bot_reply = await responses.handle_media_message(sender, url, mtype)
                 msg = twilio_resp.message(bot_reply)
-                # If you want to echo the image back, uncomment:
-                # if mtype and mtype.startswith("image/"):
-                #     msg.media(url)
         elif message:
             bot_reply = await responses.handle_text_message(sender, message, conversation_history)
             msg = twilio_resp.message(bot_reply)
-            # --- PATCH: Attach image as media if present in reply ---
+            # Attach image as media if present in reply
             import re
             match = re.search(r'(https?://\S+\.(?:jpg|jpeg|png|gif))', bot_reply)
             if match:
                 msg.media(match.group(1))
-            await log_chat(sender, message, bot_reply)  # <-- log only the plain reply
+            await log_chat(sender, message, bot_reply)
         else:
             default_reply = "Please send a message or an image."
             twilio_resp.message(default_reply)
@@ -217,9 +206,6 @@ async def handle_webhook(
 
 @app.post("/verify-payment")
 async def verify_payment(verification: PaymentVerification):
-    """
-    Verify a payment using the PaymentHandler.
-    """
     try:
         logger.debug(f"Payment verification request: {verification.dict()}")
         result = await asyncio.to_thread(payment_handler.verify_payment, verification.code)
@@ -240,16 +226,12 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
         "fallback_responses": "fallback_responses.json",
         "system_prompt": "system_prompt.json"
     }
-
     if file_type not in filename_map:
         raise HTTPException(status_code=400, detail="Invalid file type")
-
     file_path = os.path.join("config", filename_map[file_type])
-
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        # Reload system prompt if updated
         if file_type == "system_prompt":
             responses.brain.__init__()  # Re-initialize to reload prompt
         return {"message": f"{file_type} uploaded successfully."}
@@ -267,7 +249,6 @@ async def health_check():
         db = await asyncio.wait_for(UserMemory.check_connection(), timeout=5)
         s3 = await asyncio.wait_for(s3_service.check_connection(), timeout=5)
         ngrok_status = "connected" if ngrok.get_tunnels() else "disconnected"
-
         return {
             "status": "active",
             "timestamp": datetime.now().isoformat(),
@@ -280,10 +261,6 @@ async def health_check():
     except asyncio.TimeoutError:
         raise HTTPException(status_code=500, detail="Health check timed out")
 
-@app.get("/")
-async def home():
-    return "Hello from Grace!"
-
 @app.post("/shopify/ask")
 async def shopify_ask(request: ShopifyAskRequest):
     """
@@ -293,7 +270,6 @@ async def shopify_ask(request: ShopifyAskRequest):
     return {"result": result["output"] if isinstance(result, dict) and "output" in result else str(result)}
 
 def load_prompt(filename: str) -> str:
-    """Utility to load a prompt file from config/."""
     path = Path("config") / filename
     if not path.exists():
         return ""
@@ -302,10 +278,7 @@ def load_prompt(filename: str) -> str:
 @app.post("/dev/chat")
 async def dev_chat(req: DevChatRequest):
     client = AsyncOpenAI()
-    # Allow prompt override from request, else load default
     system_prompt = req.prompt_override or load_prompt("dev_assistant_prompt.txt")
-
-    # Inject optional context
     context_data = ""
     if req.context_type in {"catalog", "config", "tone"}:
         file_path = f"config/{req.context_type}.json"
@@ -323,9 +296,7 @@ async def dev_chat(req: DevChatRequest):
             context_data = "---\nRecent Conversation:\n" + "\n".join(
                 f"U: {x['user_message']}\nG: {x['bot_reply']}" for x in last_5
             ) + "\n---"
-
     full_prompt = f"{system_prompt}\n\n{context_data}\n\nUser query:\n{req.query}"
-
     try:
         response = await client.chat.completions.create(
             model=req.model,
@@ -346,7 +317,6 @@ async def save_speech_library(req: Request):
     response = data.get("response", "").strip()
     if not phrase or not response:
         return {"error": "Missing phrase or response"}
-    
     file_path = "config/speech_library.json"
     async with aiofiles.open(file_path, "r+", encoding="utf-8") as f:
         try:
@@ -359,12 +329,23 @@ async def save_speech_library(req: Request):
         await f.truncate()
     return {"message": "Saved to speech library ✅"}
 
+@app.get("/admin/get_speech_library")
+async def get_speech_library():
+    """
+    Returns the current speech library as JSON.
+    """
+    file_path = "config/speech_library.json"
+    if not os.path.exists(file_path):
+        return {"training_data": []}
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        try:
+            data = json.loads(await f.read())
+            return data
+        except Exception:
+            return {"training_data": []}
+
 @app.post("/dev/tone")
 async def generate_tones(req: Request):
-    """
-    Generate multiple tone variations for a given message.
-    Returns a dict: { "Friendly": "...", "Formal": "...", ... }
-    """
     data = await req.json()
     base = data.get("message", "")
     tones = {
@@ -391,10 +372,6 @@ async def generate_tones(req: Request):
 
 @app.post("/dev/grade")
 async def dev_grade(req: Request):
-    """
-    Scores a Grace reply for a user message.
-    Returns: { "score": int, "explanation": str }
-    """
     data = await req.json()
     user = data.get("user", "")
     reply = data.get("reply", "")
@@ -414,14 +391,11 @@ async def dev_grade(req: Request):
             messages=[{"role": "system", "content": prompt}]
         )
         import json as pyjson
-        # Try to extract JSON from the model's reply
-        text = res.choices[0].message.content
-        # Find the first {...} JSON block in the reply
         import re
+        text = res.choices[0].message.content
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             return pyjson.loads(match.group(0))
-        # fallback: return raw text
         return {"score": None, "explanation": text}
     except Exception as e:
         return {"error": str(e)}
@@ -429,16 +403,10 @@ async def dev_grade(req: Request):
 # ---------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------
-
 async def log_chat(sender: str, user_msg: str, bot_reply: str, auto_score: int = None, prompt_version: str = None) -> None:
-    """
-    Log each chat turn with all relevant metadata for future learning and analytics.
-    Also logs conversation metrics and exports top Q&A pairs for fine-tuning.
-    """
     clean_sender = sender.replace("whatsapp:", "")
     log_file = f"logs/{clean_sender}_chat_history.json"
     state_id = await compute_state_id()
-
     score = await grade_turn(user_msg, bot_reply)
     log_entry = {
         "timestamp": datetime.now().isoformat(),
@@ -448,29 +416,25 @@ async def log_chat(sender: str, user_msg: str, bot_reply: str, auto_score: int =
         "auto_score": score,
         "human_score": None,
         "state_id": state_id,
-        "prompt_version": prompt_version  # <--- add this line
+        "prompt_version": prompt_version
     }
-
-    # --- Conversation Metrics ---
+    # Conversation Metrics
     try:
-        # Log order placed
         if "order placed" in bot_reply.lower():
             with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(["order_placed", clean_sender, 1, datetime.now().isoformat()])
-        # Log refund mentioned
         if "refund" in user_msg.lower() or "refund" in bot_reply.lower():
             with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(["refund_mentioned", clean_sender, 1, datetime.now().isoformat()])
-        # Log words per turn
         with open("logs/conversation_metrics.csv", "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["words_per_turn", clean_sender, len(bot_reply.split()), datetime.now().isoformat()])
     except Exception as e:
         logger.error(f"Error logging conversation metrics for {clean_sender}: {e}")
 
-    # --- Export Top Q&A Pairs for Fine-Tuning ---
+    # Export Top Q&A Pairs for Fine-Tuning
     try:
         if score is not None and score >= 8:
             with open("logs/top_pairs.jsonl", "a", encoding="utf-8") as f:
@@ -482,7 +446,7 @@ async def log_chat(sender: str, user_msg: str, bot_reply: str, auto_score: int =
     except Exception as e:
         logger.error(f"Error exporting top Q&A pair for {clean_sender}: {e}")
 
-    # --- Log Chat Turn ---
+    # Log Chat Turn
     try:
         if os.path.exists(log_file):
             async with aiofiles.open(log_file, "r+", encoding="utf-8") as file:
@@ -509,7 +473,6 @@ async def refresh_cached_images():
         await asyncio.sleep(300)
 
 def ensure_required_files():
-    """Ensure required configuration files exist in the 'config' directory."""
     required_files = ["config.json", "catalog.json", "speech_library.json", "fallback_responses.json"]
     for file in required_files:
         file_path = os.path.join("config", file)
@@ -530,6 +493,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=config.APP["port"],
-        reload=False,          # <── change
+        reload=False,
         log_level="info",
     )

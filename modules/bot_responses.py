@@ -84,6 +84,39 @@ async def grade_turn(user, reply):
         logger.error(f"Auto-grader failed: {e}")
         return None
 
+def fix_whatsapp_bold(text):
+    # Replace **text** or __text__ with *text*
+    text = re.sub(r"\*\*(.*?)\*\*", r"*\1*", text)
+    text = re.sub(r"__(.*?)__", r"*\1*", text)
+    return text
+
+def resolve_reference(user_message: str, chat_history: list) -> str:
+    """
+    Replace ambiguous references like 'it', 'this', 'that' in user_message
+    with the last mentioned product/service/item in chat_history.
+    """
+    if re.search(r"\b(it|this|that)\b", user_message, re.I):
+        for turn in reversed(chat_history):
+            # Look for product/service/item/plan/course/package in user or bot messages
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get('user_message', ''), re.I)
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get('bot_reply', ''), re.I)
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+    return user_message
+
+def format_conversation(history: List[Dict[str, str]]) -> str:
+    formatted = [
+        f"{h['role']}: {h['content']}" for h in history[-MAX_HISTORY_MESSAGES:] if h.get("role") and h.get("content")
+    ]
+    convo = "\n".join(formatted)
+    return convo[:MAX_HISTORY_LENGTH].rsplit("\n", 1)[0] if len(convo) > MAX_HISTORY_LENGTH else convo
+
 class BotResponses:
     """High-level orchestration for Grace’s responses."""
 
@@ -127,13 +160,6 @@ class BotResponses:
         session = self.get_user_session(sender)
         session["customer_name"] = name
 
-    def format_conversation(self, history: List[Dict[str, str]]) -> str:
-        formatted = [
-            f"{h['role']}: {h['content']}" for h in history[-MAX_HISTORY_MESSAGES:] if h.get("role") and h.get("content")
-        ]
-        convo = "\n".join(formatted)
-        return convo[:MAX_HISTORY_LENGTH].rsplit("\n", 1)[0] if len(convo) > MAX_HISTORY_LENGTH else convo
-
     async def handle_configured_text(self, intent: str, _msg: str, _hist: list) -> str:
         """Return canned responses stored in speech_library.json."""
         return self.brain.get_response(intent)
@@ -145,7 +171,6 @@ class BotResponses:
         if media_type.startswith("image/"):
             try:
                 image_history.setdefault(sender, []).append({"url": media_url, "timestamp": time.time()})
-                # Pass both sender and media_url as required by handle_image
                 result = await image_processor.handle_image(sender, media_url)
                 return result
             except Exception:
@@ -264,10 +289,12 @@ class BotResponses:
 
         # 7) All other intents: use LLM, then grade and store
         try:
-            formatted_history = self.format_conversation(conversation_history)
+            # --- Contextual reference resolution ---
+            resolved_message = resolve_reference(message, conversation_history)
+            formatted_history = format_conversation(conversation_history)
             logger.info(f"Formatted conversation history: {formatted_history}")
 
-            prompt = await self.brain.build_prompt(formatted_history, message)
+            prompt = await self.brain.build_prompt(formatted_history, resolved_message)
             logger.info(f"Generated prompt: {prompt}")
 
             response = await GraceAgent.ainvoke(prompt)
@@ -301,6 +328,7 @@ class BotResponses:
             asyncio.create_task(grade_and_store())
 
             cleaned = squash(cleaned)  # Enforce 40-word cap before reply goes out
+            cleaned = fix_whatsapp_bold(cleaned)
             return cleaned
 
         except Exception as e:

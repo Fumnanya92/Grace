@@ -30,13 +30,11 @@ from modules.utils import (
 )
 from stores.shopify_async import get_products_for_image_matching
 
-
 # ---------------------------------------------------------------------
 # Constants and File Paths
 # ---------------------------------------------------------------------
 CONFIG_DIR = Path("config")
 FALLBACKS_FILE = CONFIG_DIR / "fallback_responses.json"
-
 
 # ---------------------------------------------------------------------
 # Utility Functions
@@ -52,11 +50,29 @@ def _load_json(path: Path, default: Optional[dict] = None) -> dict:
         logger.error("Failed to load %s: %s", path.name, exc)
         return default or {}
 
-
 async def fetch_catalog() -> List[Dict[str, Any]]:
     """Fetch the product catalog dynamically from Shopify, adapted for prompts."""
     return await get_products_for_image_matching()
 
+def resolve_reference(user_message: str, chat_history: list) -> str:
+    """
+    Replace ambiguous references like 'it', 'this', 'that' in user_message
+    with the last mentioned product/service/item in chat_history.
+    """
+    if re.search(r"\b(it|this|that)\b", user_message, re.I):
+        for turn in reversed(chat_history):
+            # Look for product/service/item/plan/course/package in user or bot messages
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get('user_message', ''), re.I)
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get('bot_reply', ''), re.I)
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+    return user_message
 
 # ---------------------------------------------------------------------
 # GraceBrain Class
@@ -84,7 +100,8 @@ class GraceBrain:
     # -----------------------------------------------------------------
     def get_response(self, intent: str, **kwargs) -> str:
         """Return a canned response formatted with kwargs, fallback to backup JSON."""
-        if resp := get_canned_response(intent):
+        resp = get_canned_response(intent)
+        if resp:
             return resp.format(**kwargs)
         logger.warning("No response found for intent '%s'", intent)
         return self.fallbacks.get(intent, self.fallbacks.get("default_response", "[no_reply]"))
@@ -152,7 +169,8 @@ class GraceBrain:
 
     def extract_response_key(self, text: str) -> str:
         """Extract [[intent_key]] tag from GPT reply."""
-        if match := re.search(r"\[\[(.*?)]]", text):
+        match = re.search(r"\[\[(.*?)]]", text)
+        if match:
             return match.group(1).strip()
         return "default_response"
 
@@ -161,7 +179,9 @@ class GraceBrain:
     # -----------------------------------------------------------------
     async def build_prompt(self, chat_history: str, user_message: str) -> str:
         catalog = await self.get_catalog()
-        show_catalog = any(k in user_message.lower() for k in ("show", "price", "catalog", "product", "dress", "set"))
+        # Use config for catalog keywords, fallback to generic ones
+        catalog_keywords = self.config.get("catalog_keywords", ["show", "price", "catalog", "product", "service", "item"])
+        show_catalog = any(k in user_message.lower() for k in catalog_keywords)
         catalog_intro = self._build_catalog_intro(catalog) if show_catalog else ""
         keys = ", ".join(f"[[{k}]]" for k in self.intent_keys())
         business_info = self._build_business_info()
@@ -178,7 +198,7 @@ class GraceBrain:
             "Instructions:\n"
             "- Do not repeat greetings if you have already greeted the user in this conversation.\n"
             "- If the user asks about Instagram, payment, or business hours, always answer with the exact info from above.\n"
-            "- If the user asks for a product, suggest from the catalog if possible before using your own words.\n"
+            "- If the user asks for a product or service, suggest from the catalog if possible before using your own words.\n"
             f"Recent conversation:\n{chat_history}\n\n",
             f"User: {user_message}\n\n"
         ]

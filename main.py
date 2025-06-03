@@ -20,9 +20,11 @@ from typing import Optional
 from pydantic import BaseModel
 from openai import AsyncOpenAI
 from pathlib import Path
-from stores.shopify_async import get_products_for_image_matching
+from stores.shopify_async import get_products_for_image_matching, get_shopify_products, _fuzzy_match_product, _format_product
 from modules.shared import image_processor, s3_service
 import csv
+from fastapi.middleware.cors import CORSMiddleware
+import aiosqlite
 
 # ---------------------------------------------------------------------
 # Models
@@ -39,6 +41,7 @@ class DevChatRequest(BaseModel):
     model: str = "gpt-4o"
     prompt_override: Optional[str] = None
 
+
 # ---------------------------------------------------------------------
 # Imports for Modules
 # ---------------------------------------------------------------------
@@ -52,6 +55,7 @@ from config import config
 from logging_config import configure_logger
 from init_db import init_db
 from admin.homepage import router as homepage_router
+from modules.dev_assistant import agent as dev_agent, code_search, code_edit, _persist
 
 # ---------------------------------------------------------------------
 # Initialization
@@ -82,6 +86,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(shopify_router)
 app.include_router(homepage_router)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5174"],  # Frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define the base directory and config directory
 BASE_DIR = Path(__file__).resolve().parent
@@ -262,12 +275,40 @@ async def health_check():
         raise HTTPException(status_code=500, detail="Health check timed out")
 
 @app.post("/shopify/ask")
-async def shopify_ask(request: ShopifyAskRequest):
+async def shopify_ask(req: ShopifyAskRequest):
     """
-    Directly query the Shopify agent with a natural language question.
+    Search catalog by name (fast) and fall back to the LLM agent for
+    free-form questions that aren’t matched.
     """
-    result = await agent.ainvoke({"input": request.query})
-    return {"result": result["output"] if isinstance(result, dict) and "output" in result else str(result)}
+    try:
+        # 1) Fast fuzzy match first
+        products = await get_shopify_products()
+        match = _fuzzy_match_product(req.query, products)
+        if match:
+            # Format the matched product for the front-end
+            formatted_product = _format_product(match)
+            return {"products": [formatted_product]}  # <-- front-end ready
+
+        # 2) Otherwise let the agent reason (but guard schema)
+        try:
+            llm_out = await agent.ainvoke({"input": req.query})
+            interpreted = llm_out.get("output", req.query)
+        except Exception as e:
+            logger.warning("Agent failed: %s. Using raw query.", e)
+            interpreted = req.query
+
+        # Fuzzy match again with the interpreted query
+        match = _fuzzy_match_product(interpreted, products)
+        if match:
+            formatted_product = _format_product(match)
+            return {"products": [formatted_product]}
+
+        # No match found
+        return {"products": []}
+
+    except Exception as e:
+        logger.exception("Unexpected error in /shopify/ask")
+        raise HTTPException(500, "Store unavailable")
 
 def load_prompt(filename: str) -> str:
     path = Path("config") / filename
@@ -277,15 +318,20 @@ def load_prompt(filename: str) -> str:
 
 @app.post("/dev/chat")
 async def dev_chat(req: DevChatRequest):
+    """
+    Handle requests to the Dev Assistant via /dev/chat.
+    """
     client = AsyncOpenAI()
     system_prompt = req.prompt_override or load_prompt("dev_assistant_prompt.txt")
     context_data = ""
+
+    # Load on-demand context (e.g., catalog, config, tone, chatlog)
     if req.context_type in {"catalog", "config", "tone"}:
         file_path = f"config/{req.context_type}.json"
         if Path(file_path).exists():
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
-                context_data = f"---\n{req.context_type.upper()}:\n{content}\n---"
+                context_data += f"---\n{req.context_type.upper()}:\n{content}\n---"
     elif req.context_type == "chatlog":
         from glob import glob
         files = sorted(glob("logs/*_chat_history.json"), reverse=True)
@@ -293,18 +339,100 @@ async def dev_chat(req: DevChatRequest):
             async with aiofiles.open(files[0], "r", encoding="utf-8") as f:
                 data = json.loads(await f.read())
             last_5 = data[-5:] if len(data) >= 5 else data
-            context_data = "---\nRecent Conversation:\n" + "\n".join(
+            context_data += "---\nRecent Conversation:\n" + "\n".join(
                 f"U: {x['user_message']}\nG: {x['bot_reply']}" for x in last_5
             ) + "\n---"
+
+    # Load Dev Assistant memory if context_type is "dev_memory"
+    if req.context_type == "dev_memory":
+        memory_file = "config/dev_assistant_memory.json"
+        if os.path.exists(memory_file):
+            async with aiofiles.open(memory_file, "r", encoding="utf-8") as f:
+                memory_data = json.loads(await f.read())
+                conversations = memory_data.get("conversations", [])
+                notes = memory_data.get("notes", {})
+                context_data += "---\nDev Memory:\n"
+                context_data += "Conversations:\n" + "\n".join(
+                    f"- {conv['timestamp']} [{conv['topic']}]: {conv['user_prompt']} → {conv['assistant_reply']}"
+                    for conv in conversations
+                )
+                context_data += "\nNotes:\n" + "\n".join(
+                    f"- {key}: {', '.join(value)}" for key, value in notes.items()
+                )
+                context_data += "\n---"
+
+    # Combine system prompt, context data, and user query
     full_prompt = f"{system_prompt}\n\n{context_data}\n\nUser query:\n{req.query}"
+
     try:
-        response = await client.chat.completions.create(
-            model=req.model,
-            messages=[{"role": "system", "content": full_prompt}]
-        )
-        return {"result": response.choices[0].message.content.strip()}
+        # Use the dev_agent to process the query
+        result = await dev_agent.arun(req.query)
+
+        # Save the conversation to Dev Assistant memory if context_type is "dev_memory"
+        if req.context_type == "dev_memory":
+            async with aiofiles.open(memory_file, "r+", encoding="utf-8") as f:
+                try:
+                    memory_data = json.loads(await f.read())
+                except json.JSONDecodeError:
+                    memory_data = {"conversations": [], "notes": {}}
+                memory_data["conversations"].append({
+                    "timestamp": datetime.now().isoformat(),
+                    "topic": req.query.split()[0],  # Use the first word as a topic placeholder
+                    "user_prompt": req.query,
+                    "assistant_reply": result
+                })
+                await f.seek(0)
+                await f.write(json.dumps(memory_data, indent=2))
+                await f.truncate()
+
+        # Persist memory turn
+        _persist({"user": req.query, "assistant": result})
+
+        return {"result": result}
     except Exception as e:
+        logger.error(f"Error in /dev/chat: {str(e)}")
         return {"error": str(e)}
+
+# ---------------------------------------------------------------------
+@app.get("/admin/get_dev_memory")
+async def get_dev_memory():
+    """
+    Retrieve the Dev Assistant memory.
+    """
+    file_path = "config/dev_assistant_memory.json"
+    if not os.path.exists(file_path):
+        return {"conversations": [], "notes": {}}
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        try:
+            data = json.loads(await f.read())
+            return data
+        except Exception:
+            return {"conversations": [], "notes": {}}
+
+
+@app.post("/admin/save_dev_memory")
+async def save_dev_memory(req: Request):
+    """
+    Save a note to the Dev Assistant memory.
+    """
+    data = await req.json()
+    key = data.get("key", "").strip()
+    value = data.get("value", "").strip()
+    if not key or not value:
+        return {"error": "Missing key or value"}
+    file_path = "config/dev_assistant_memory.json"
+    async with aiofiles.open(file_path, "r+", encoding="utf-8") as f:
+        try:
+            memory_data = json.loads(await f.read())
+        except json.JSONDecodeError:
+            memory_data = {"conversations": [], "notes": {}}
+        if key not in memory_data["notes"]:
+            memory_data["notes"][key] = []
+        memory_data["notes"][key].append(value)
+        await f.seek(0)
+        await f.write(json.dumps(memory_data, indent=2))
+        await f.truncate()
+    return {"message": "Note added successfully"}
 
 @app.get("/dev")
 async def dev_chat_ui(request: Request):
@@ -399,6 +527,47 @@ async def dev_grade(req: Request):
         return {"score": None, "explanation": text}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/memory")
+async def get_all_memories():
+    """
+    Retrieve all stored user memories.
+    """
+    try:
+        async with aiosqlite.connect("memory.db") as conn:
+            cursor = await conn.execute("SELECT * FROM user_memory")
+            rows = await cursor.fetchall()
+            memories = [
+                {
+                    "sender": row[0],
+                    "name": row[1],
+                    "conversation_history": json.loads(row[2]) if row[2] else [],
+                    "preferences": json.loads(row[3]) if row[3] else {},
+                    "last_order": row[4],
+                    "last_interaction": row[5],
+                }
+                for row in rows
+            ]
+        return {"memories": memories}
+    except Exception as e:
+        logger.error(f"Failed to retrieve memories: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve memories.")
+
+@app.get("/prompt")
+async def get_system_prompt():
+    """
+    Retrieve the system prompt from the config file.
+    """
+    try:
+        prompt_file = "config/system_prompt.txt"
+        if not os.path.exists(prompt_file):
+            return {"prompt": ""}
+        async with aiofiles.open(prompt_file, "r", encoding="utf-8") as f:
+            prompt = await f.read()
+        return {"prompt": prompt}
+    except Exception as e:
+        logger.error(f"Failed to retrieve system prompt: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve system prompt.")
 
 # ---------------------------------------------------------------------
 # Utility Functions

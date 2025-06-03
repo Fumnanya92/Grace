@@ -1,0 +1,26 @@
+.chat-bubble {
+  max-width: 70%;
+  margin: 8px 0;
+  padding: 12px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  transition: background 0.2s;
+}
+
+.user-bubble {
+  background-color: #e0f7fa;
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.grace-bubble {
+  background-color: #fce4ec;
+  align-self: flex-start;
+  margin-right: auto;
+}
+
+.bubble-text {
+  color: #333;
+}

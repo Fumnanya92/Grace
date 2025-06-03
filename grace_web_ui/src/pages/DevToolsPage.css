@@ -1,0 +1,33 @@
+.devtools-page {
+  padding: 20px;
+}
+
+.tool-card {
+  background-color: #fdf4f4;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin: 20px 0;
+  padding: 20px;
+}
+
+.tool-card h3 {
+  margin-top: 0;
+  color: #a86a6a;
+}
+
+.tool-card p {
+  margin: 10px 0;
+}
+
+.tool-card button {
+  padding: 8px 16px;
+  background-color: #d6b3b3;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tool-card button:hover {
+  background-color: #b67e7e;
+}

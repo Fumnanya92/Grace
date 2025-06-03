@@ -1,0 +1,37 @@
+.intent-trainer {
+  padding: 20px;
+}
+
+.intent-trainer input,
+.intent-trainer textarea {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.intent-trainer textarea {
+  font-family: monospace;
+  resize: vertical;
+  background-color: #fefefe;
+}
+
+.intent-trainer button {
+  background: #3b82f6;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.intent-trainer button:hover {
+  background: #2563eb;
+}
+
+.status {
+  margin-top: 8px;
+  font-size: 14px;
+}

@@ -1,0 +1,45 @@
+.speech-editor {
+  padding: 20px;
+}
+
+.speech-list {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 20px;
+}
+
+.speech-list li {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #f4f1f1;
+  border-left: 4px solid #9d7c7c;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.add-entry {
+  margin-top: 20px;
+}
+
+.add-entry input,
+.add-entry textarea {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.add-entry button {
+  padding: 8px 16px;
+  background-color: #9c6e6e;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.add-entry button:hover {
+  background-color: #7e5959;
+}

@@ -15,10 +15,12 @@ chatbot.log
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# IDEs
+# IDEs and editors
 .vscode/
 .idea/
+*.iml
 
 # Python virtual environments
 venv/
@@ -31,7 +33,6 @@ env/
 memory.db
 flow_progress.json
 speech_library.json
-generate_api_key.py
 tenant_map.json
 
 # Test and temp files
@@ -40,15 +41,47 @@ tenant_map.json
 *.bak
 *.swp
 *.swo
+*.orig
 
 # Image processing cache/temp
 tmp/
 *.jpeg
 *.jpg
 *.png
+*.gif
 
 # Jupyter
 .ipynb_checkpoints/
 
 # AWS credentials (precaution)
 .aws/
+
+# Node.js / React project (grace_web_ui)
+grace_web_ui/node_modules/
+grace_web_ui/build/
+grace_web_ui/dist/
+grace_web_ui/.env
+grace_web_ui/.DS_Store
+grace_web_ui/npm-debug.log*
+grace_web_ui/yarn-debug.log*
+grace_web_ui/yarn-error.log*
+grace_web_ui/.parcel-cache/
+grace_web_ui/.turbo/
+grace_web_ui/.next/
+grace_web_ui/out/
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output/
+
+# Miscellaneous
+*.log
+*.lock
+*.gz
+*.zip
+*.tar
+*.tgz
+*.bak
+*.tmp
+*.cache

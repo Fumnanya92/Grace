@@ -1,0 +1,43 @@
+.scoring-assistant {
+  padding: 20px;
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 40px;
+}
+
+.scoring-assistant h2 {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.scoring-assistant input,
+.scoring-assistant textarea,
+.scoring-assistant select {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.scoring-assistant button {
+  padding: 10px 20px;
+  background-color: #f38ca6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.scoring-assistant button:hover {
+  background-color: #e6738f;
+}
+
+.success-msg {
+  color: green;
+  font-weight: bold;
+  margin-bottom: 10px;
+}

@@ -1,0 +1,37 @@
+.product-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  transition: box-shadow 0.2s;
+}
+
+.product-card img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.product-card h3 {
+  font-size: 18px;
+  margin: 12px 0;
+}
+
+.product-card .price {
+  color: #ff4081;
+  font-weight: bold;
+}
+
+.product-card .buy-button {
+  padding: 8px 16px;
+  background-color: #ff4081;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.product-card .buy-button:hover {
+  background-color: #f50057;
+}

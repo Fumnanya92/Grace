@@ -1,0 +1,59 @@
+.dev-assistant-container {
+  padding: 1rem;
+  max-width: 768px;
+  margin: 0 auto;
+}
+
+.dev-assistant-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.dev-assistant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dev-assistant-textarea,
+.dev-assistant-select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.dev-assistant-button {
+  background-color: #2563eb;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.dev-assistant-button:hover {
+  background-color: #1d4ed8;
+}
+
+.dev-assistant-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.dev-assistant-response {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  white-space: pre-wrap;
+}
+
+.dev-assistant-response strong {
+  font-weight: 600;
+}

@@ -1,0 +1,51 @@
+.settings-container {
+  max-width: 500px;
+  margin: 40px auto;
+  padding: 20px;
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+}
+
+.settings-container h2 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.setting-item {
+  margin-bottom: 20px;
+}
+
+.setting-item label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.setting-item select {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+}
+
+.refresh-btn,
+.logout-btn {
+  width: 100%;
+  padding: 12px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+}
+
+.refresh-btn {
+  background-color: #e6b800;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.logout-btn {
+  background-color: #d9534f;
+  color: white;
+}

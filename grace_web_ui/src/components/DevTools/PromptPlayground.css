@@ -1,0 +1,35 @@
+.prompt-playground {
+  padding: 20px;
+}
+
+.prompt-playground textarea,
+.prompt-playground input {
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  font-family: monospace;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.prompt-playground button {
+  background-color: #cc9999;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.prompt-playground button:hover {
+  background-color: #b37777;
+}
+
+.response-box {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f3eaea;
+  border-left: 5px solid #d8a5a5;
+  border-radius: 4px;
+}

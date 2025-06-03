@@ -1,0 +1,54 @@
+.memory-manager {
+  padding: 1.5rem;
+  background-color: #ffffff;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.memory-manager h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.memory-list-item {
+  padding: 0.75rem;
+  background-color: #f3f4f6;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.memory-list-item strong {
+  font-weight: 600;
+}
+
+.clear-button {
+  background-color: #ef4444;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.clear-button:hover {
+  background-color: #dc2626;
+}
+
+.clear-button:disabled {
+  background-color: #f87171;
+  cursor: not-allowed;
+}
+
+.message {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: #2563eb;
+}

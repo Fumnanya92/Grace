@@ -1,18 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import ChatBubble from "../components/Chat/ChatBubble";
 import ChatInput from "../components/Chat/ChatInput";
-import "./ChatPage.css";
 import useSpeechRecognition from "../hooks/useSpeechRecognition"; // Import the hook
-import "./../styles/common.css"; // Import common styles
+import "../styles/common.css"; // Global CSS variables (colors, fonts, etc.)
+import "./ChatPage.css"; // ChatPage‐specific styles
 
-/**
- * ChatPage – Grace web‑client that talks to `/webhook` just like Twilio does.
- * ------------------------------------------------------------
- * • Sends text & image messages using FormData (mimics Twilio).
- * • Adds required `From` field so FastAPI doesn't return 422.
- * • Parses XML replies (Twilio <Response>) or JSON fallback.
- * • Auto‑scrolls, nice Tailwind styling, attachment icon, disabled send‑btn, etc.
- */
 const ChatPage = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +17,8 @@ const ChatPage = () => {
   });
 
   /** Scroll to bottom whenever messages change */
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = () =>
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToBottom, [messages, isLoading]);
 
   /** Helper – hit /webhook with FormData the way Twilio would */
@@ -57,20 +50,33 @@ const ChatPage = () => {
       formData.append("From", "web_client");
       formData.append("Body", trimmed);
       const reply = await callWebhook(formData);
-      setMessages((prev) => [...prev, { sender: "grace", text: reply }]);
+
+      // Split the reply into lines and add each as a separate bubble
+      const lines = reply.split(/\r?\n\r?\n/).flatMap((chunk) => chunk.split(/\r?\n/));
+      setMessages((prev) => [
+        ...prev,
+        ...lines.map((line) => ({ sender: "grace", text: line.trim() })),
+      ]);
     } catch (err) {
       console.error("Error sending message:", err);
-      setMessages((prev) => [...prev, { sender: "grace", text: "❌ Network error." }]);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "grace", text: "❌ Network error." },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   /** Handle image upload */
-  const handleImageUpload = async (file) => {
+  const handleImageUpload = async (file, messageText = "") => {
     if (!file) return;
 
-    setMessages((prev) => [...prev, { sender: "user", text: "[Uploading Image...]" }]);
+    const trimmedMessage = messageText.trim();
+    setMessages((prev) => [
+      ...prev,
+      { sender: "user", text: trimmedMessage || "[Uploading Image...]" },
+    ]);
     setIsLoading(true);
 
     try {
@@ -84,22 +90,25 @@ const ChatPage = () => {
       const uploadJson = await uploadResponse.json();
       const publicUrl = uploadJson.url;
 
-      // Send the public URL to the webhook
+      // Send the public URL and optional message to the webhook
       const formData = new FormData();
       formData.append("From", "web_client");
       formData.append("MediaUrl0", publicUrl);
       formData.append("MediaContentType0", file.type);
+      if (trimmedMessage) {
+        formData.append("Body", trimmedMessage);
+      }
       const reply = await callWebhook(formData);
 
       setMessages((prev) => [
         ...prev.slice(0, -1), // Remove the "Uploading Image..." message
-        { sender: "user", text: publicUrl }, // Pass the image URL
+        { sender: "user", text: trimmedMessage || publicUrl }, // Show the message or uploaded URL
         { sender: "grace", text: reply },
       ]);
     } catch (err) {
       console.error("Error uploading image:", err);
       setMessages((prev) => [
-        ...prev.slice(0, -1), // Remove the "Uploading Image..." message
+        ...prev.slice(0, -1),
         { sender: "grace", text: "❌ Failed to upload image." },
       ]);
     } finally {
@@ -107,6 +116,7 @@ const ChatPage = () => {
     }
   };
 
+  /** Send a query to /dev/chat (Dev Assistant) */
   const handleSend = async () => {
     try {
       const res = await fetch("http://localhost:8000/dev/chat", {
@@ -121,36 +131,66 @@ const ChatPage = () => {
     }
   };
 
+  /** Handle Enter key press */
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // Prevent adding a new line
+      sendMessage(query); // Send the message
+      setQuery(""); // Clear the input field
+    }
+  };
+
   return (
-    <div className="chat-container">
+    <div className="chat-page-container">
       {/* Header */}
       <header className="chat-header">
-        <h2>Grace Chat</h2>
+        <h2 className="chat-title">Grace Chat</h2>
       </header>
 
       {/* Messages */}
-      <main className="chat-messages">
+      <main className="chat-messages-area">
         {messages.map((msg, idx) => (
-          <ChatBubble key={idx} sender={msg.sender} text={msg.text} />
+          <div key={idx} className={`bubble-wrapper ${msg.sender}`}>
+            <ChatBubble sender={msg.sender} text={msg.text} />
+          </div>
         ))}
-        {isLoading && <ChatBubble sender="grace" text="Grace is typing…" />}
+        {isLoading && (
+          <div className="bubble-wrapper grace">
+            <ChatBubble sender="grace" text="Grace is typing…" />
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Chat Input */}
-      <ChatInput onSend={sendMessage} onImageUpload={handleImageUpload} />
-      <div>
+      {/* Chat Input (existing component) */}
+      <div className="chat-input-wrapper">
+        <ChatInput
+          onSend={sendMessage} // Pass the sendMessage function from ChatPage
+          onImageUpload={(file, message) => handleImageUpload(file, message)} // Pass the handleImageUpload function
+        />
+      </div>
+
+      {/* Voice + Raw Query Box */}
+      <div className="voice-query-wrapper">
         <textarea
+          className="voice-query-textarea"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type your query or use voice input..."
+          onKeyDown={handleKeyDown} // Listen for Enter key
+          placeholder="Type your query or use voice input…"
         />
-        <button onClick={toggle}>
-          {listening ? "Stop Listening" : "Start Listening"}
-        </button>
-        <button onClick={handleSend}>Send</button>
-        {response && <p className="response">{response}</p>}
+        <div className="voice-buttons">
+          <button className="voice-toggle-btn" onClick={toggle}>
+            {listening ? "Stop Listening" : "Start Listening"}
+          </button>
+          <button className="voice-send-btn" onClick={handleSend}>
+            Send
+          </button>
+        </div>
       </div>
+
+      {/* Assistant’s LLM response */}
+      {response && <div className="llm-response-box">{response}</div>}
     </div>
   );
 };

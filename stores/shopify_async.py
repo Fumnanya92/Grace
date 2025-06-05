@@ -318,4 +318,5 @@ __all__ = [
     "get_product_details",
     "is_product_query",
     "format_product_response",
+    "get_products_for_image_matching",
 ]

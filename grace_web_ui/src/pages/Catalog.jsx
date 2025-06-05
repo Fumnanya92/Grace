@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import './CatalogPage.css';
-import ProductCard from '../components/Catalog/ProductCard';
+import React, { useEffect, useState } from "react";
+import "./CatalogPage.css";
+import ProductCard from "../components/Catalog/ProductCard";
 
 const CatalogPage = () => {
   const [products, setProducts] = useState([]);
@@ -14,10 +14,9 @@ const CatalogPage = () => {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:8000/shopify/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery }),
+      const res = await fetch("http://localhost:8000/shopify/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
 
       if (!res.ok) {
@@ -27,7 +26,7 @@ const CatalogPage = () => {
       const data = await res.json();
       setProducts(data.products || []);
     } catch (error) {
-      console.error('Error fetching catalog:', error);
+      console.error("Error fetching catalog:", error);
       setError("Failed to fetch products. Please try again.");
     } finally {
       setLoading(false);
@@ -35,34 +34,13 @@ const CatalogPage = () => {
   };
 
   /** Handle form submission for search */
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     e.preventDefault();
     if (!query.trim()) {
       setError("Please enter a valid search query.");
       return;
     }
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("http://localhost:8000/shopify/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      setProducts(data.products || []);
-    } catch (err) {
-      console.error("Error fetching product details:", err);
-      setError("Failed to fetch product details. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    fetchCatalog(query);
   };
 
   /** Fetch all products on initial load */
@@ -71,33 +49,39 @@ const CatalogPage = () => {
   }, []);
 
   return (
-    <div className="catalog-container">
-      <h2>Grace Product Catalog</h2>
+    <div className="catalog-page-container">
+      <h2 className="catalog-title">Grace Product Catalog</h2>
 
       {/* Search Bar */}
-      <form onSubmit={handleSearch} className="search-bar">
+      <form onSubmit={handleSearch} className="catalog-search-bar">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for products (e.g., 'red dresses')"
-          className="search-input"
+          className="catalog-search-input"
+          aria-label="Search for products"
         />
-        <button type="submit" className="search-button">
+        <button
+          type="submit"
+          className="catalog-search-button"
+          disabled={!query.trim()}
+          aria-label="Search"
+        >
           Search
         </button>
       </form>
 
       {/* Error Message */}
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className="catalog-error-message">{error}</p>}
 
       {/* Product Grid */}
       {loading ? (
-        <p>Loading catalog...</p>
+        <p className="catalog-loading">Loading catalog...</p>
       ) : products.length === 0 ? (
-        <p>No products found.</p>
+        <p className="catalog-no-results">No products found.</p>
       ) : (
-        <div className="product-grid">
+        <div className="catalog-product-grid">
           {products.map((item, index) => (
             <ProductCard key={index} item={item} />
           ))}

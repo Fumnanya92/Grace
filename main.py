@@ -90,11 +90,28 @@ app.include_router(homepage_router)
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174"],  # Frontend origin
+    allow_origins=["http://localhost:5173"],  # Frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure the "uploads" directory exists during startup
+UPLOADS_DIR = "uploads"
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Define the /upload-image endpoint
+@app.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Handle image uploads and return a public URL."""
+    path = os.path.join(UPLOADS_DIR, file.filename)
+    with open(path, "wb") as buf:
+        shutil.copyfileobj(file.file, buf)
+    public_url = f"http://localhost:8000/uploads/{file.filename}"
+    return {"url": public_url}
+
+# Serve the "uploads" folder as static files
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # Define the base directory and config directory
 BASE_DIR = Path(__file__).resolve().parent
@@ -133,6 +150,16 @@ async def shutdown():
             await refresh_task
         except asyncio.CancelledError:
             logger.debug("refresh_cached_images task cancelled")
+    
+    # Close the ImageProcessor instance
+    if app.state.image_processor:
+        try:
+            await app.state.image_processor.close()
+            logger.info("ImageProcessor closed successfully.")
+        except Exception as e:
+            logger.error(f"Error while closing ImageProcessor: {e}")
+
+    # Kill Ngrok process
     try:
         ngrok.kill()
         logger.debug("Ngrok process killed successfully.")
@@ -309,6 +336,12 @@ async def shopify_ask(req: ShopifyAskRequest):
     except Exception as e:
         logger.exception("Unexpected error in /shopify/ask")
         raise HTTPException(500, "Store unavailable")
+    
+@app.post("/shopify/catalog")
+async def get_full_catalog():
+    """Return the full Shopify catalog."""
+    prods = await get_products_for_image_matching()
+    return {"products": prods}
 
 def load_prompt(filename: str) -> str:
     path = Path("config") / filename
@@ -636,10 +669,13 @@ async def log_chat(sender: str, user_msg: str, bot_reply: str, auto_score: int =
         logger.error(f"Error logging chat for {clean_sender}: {e}")
 
 async def refresh_cached_images():
-    while True:
-        cached_list_images.cache_clear()
-        logger.info("Refreshed cached product images")
-        await asyncio.sleep(300)
+    try:
+        while True:
+            cached_list_images.cache_clear()
+            logger.info("Refreshed cached product images")
+            await asyncio.sleep(300)
+    except asyncio.CancelledError:
+        logger.info("refresh_cached_images task cancelled")
 
 def ensure_required_files():
     required_files = ["config.json", "catalog.json", "speech_library.json", "fallback_responses.json"]

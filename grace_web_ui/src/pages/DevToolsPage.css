@@ -1,33 +1,117 @@
+/*------------------------------------------*/
+/*  DevToolsPage.css                         */
+/*------------------------------------------*/
+
 .devtools-page {
-  padding: 20px;
+  padding: 2rem 1rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: calc(100vh - 60px); /* Adjust if needed */
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
+.devtools-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-brand);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+/* Tab Bar */
+.devtools-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.devtools-tab-button {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.devtools-tab-button:hover {
+  background-color: #ececec;
+}
+
+.devtools-tab-button.active {
+  background-color: var(--color-btn-primary);
+  border-color: var(--color-btn-primary);
+  color: #fff;
+}
+
+/* Tab Content */
+.devtools-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Individual tool card styling (shared) */
 .tool-card {
   background-color: #fdf4f4;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  margin: 20px 0;
-  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .tool-card h3 {
-  margin-top: 0;
+  margin: 0;
   color: #a86a6a;
+  font-size: 1.25rem;
 }
 
 .tool-card p {
-  margin: 10px 0;
+  margin: 0;
+  color: var(--color-text-secondary, #555);
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
-.tool-card button {
-  padding: 8px 16px;
-  background-color: #d6b3b3;
+/* Reload button in System Config tab */
+.reload-button {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--color-accent, #ba68c8);
   color: #fff;
   border: none;
   border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  width: fit-content;
 }
 
-.tool-card button:hover {
-  background-color: #b67e7e;
+.reload-button:hover {
+  background-color: #9c27b0;
+}
+
+.reload-button:active {
+  transform: scale(0.97);
+}
+
+/* Responsive: stack tabs vertically on narrow screens */
+@media (max-width: 600px) {
+  .devtools-tab-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .devtools-tab-button {
+    width: 100%;
+    text-align: center;
+  }
 }

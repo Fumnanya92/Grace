@@ -1,15 +1,25 @@
-/* Reset some default browser styles */
+/*------------------------------------------*/
+/*  CSS Reset                               */
+/*------------------------------------------*/
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  scroll-behavior: smooth;
 }
 
-body {
+html, body {
+  height: 100%;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f9f9f9;
-  color: #333;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   line-height: 1.6;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
 }
 
 a {
@@ -17,12 +27,90 @@ a {
   color: inherit;
 }
 
-button {
-  cursor: pointer;
+ul, ol {
+  list-style: none;
 }
 
+/*------------------------------------------*/
+/*  CSS Variables                           */
+/*------------------------------------------*/
+
+:root {
+  --color-bg: #e3f2fd;           /* Soft calm blue */
+  --color-text: #4a2e35;         /* Dark, warm text */
+  --color-sidebar-bg: #ffffff;   /* Pure white sidebar */
+  --color-sidebar-text: #4a2e35; /* Same as body text */
+  --color-sidebar-hover: #f0eaea;/* Light taupe */
+  --color-sidebar-active: #8b4a58; /* Brand accent */
+  --color-sidebar-active-text: #ffffff;
+  --color-shadow: rgba(0, 0, 0, 0.05);
+
+  --color-btn-primary: #f06292;
+  --color-btn-primary-hover: #e91e63;
+  --color-btn-secondary: #a1887f;
+  --color-btn-secondary-hover: #795548;
+  --color-btn-tertiary: #ba68c8;
+  --color-btn-tertiary-hover: #9c27b0;
+
+  --transition-short: 0.3s ease;
+}
+
+/*------------------------------------------*/
+/*  Global Layout                           */
+/*------------------------------------------*/
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/*------------------------------------------*/
+/*  Utility Classes                         */
+/*------------------------------------------*/
+
 .container {
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0 1rem;
+}
+
+.flex {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/*------------------------------------------*/
+/*  Responsive Breakpoints                  */
+/*------------------------------------------*/
+
+@media (max-width: 768px) {
+  :root {
+    --color-text: #333333; /* Slightly darker text for smaller screens */
+  }
+
+  .container {
+    padding: 0 0.5rem;
+  }
 }

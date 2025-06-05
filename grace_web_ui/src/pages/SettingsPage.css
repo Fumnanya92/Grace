@@ -1,51 +1,137 @@
-.settings-container {
-  max-width: 500px;
-  margin: 40px auto;
-  padding: 20px;
-  background-color: var(--card-bg);
+/*------------------------------------------*/
+/*  SettingsPage.css                         */
+/*------------------------------------------*/
+
+/* Default theme (light) */
+:root {
+  --background-color: #ffffff;
+  --text-color: #000000;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --background-color: #121212;
+  --text-color: #ffffff;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --background-color: #ffffff;
+  --text-color: #000000;
+}
+
+/* Apply the theme variables */
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Container */
+.settings-page-container {
+  max-width: 600px;
+  margin: 2.5rem auto;
+  padding: 2rem;
+  background-color: var(--card-bg, #ffffff);
   border-radius: 12px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.settings-container h2 {
+/* Title */
+.settings-title {
+  margin: 0;
   text-align: center;
-  margin-bottom: 24px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-brand, #8b4a58);
 }
 
-.setting-item {
-  margin-bottom: 20px;
+/* Each setting row */
+.settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.setting-item label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: bold;
-}
-
-.setting-item select {
-  width: 100%;
-  padding: 10px;
+.settings-label {
+  font-weight: 600;
   font-size: 1rem;
+  color: var(--color-text, #4a2e35);
 }
 
-.refresh-btn,
-.logout-btn {
-  width: 100%;
-  padding: 12px;
-  font-weight: bold;
+/* Dropdowns */
+.settings-select {
+  padding: 0.75rem 1rem;
   font-size: 1rem;
-  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  color: var(--color-text, #4a2e35);
+  transition: border-color var(--transition-short, 0.3s ease),
+    box-shadow var(--transition-short);
+}
+
+.settings-select:focus {
+  border-color: var(--color-brand, #8b4a58);
+  box-shadow: 0 0 0 3px rgba(139, 74, 88, 0.15);
+  outline: none;
+}
+
+/* Buttons */
+.settings-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color var(--transition-short),
+    transform var(--transition-short);
 }
 
+/* Reload persona button */
 .refresh-btn {
-  background-color: #e6b800;
+  background-color: var(--color-accent, #e6b800);
   color: #fff;
-  margin-bottom: 10px;
 }
 
+.refresh-btn:hover {
+  background-color: #d4a500;
+}
+
+.refresh-btn:active {
+  transform: scale(0.98);
+}
+
+/* Logout button */
 .logout-btn {
-  background-color: #d9534f;
-  color: white;
+  background-color: var(--color-btn-secondary, #d9534f);
+  color: #fff;
+}
+
+.logout-btn:hover {
+  background-color: #c9302c;
+}
+
+.logout-btn:active {
+  transform: scale(0.98);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .settings-page-container {
+    margin: 1.5rem 1rem;
+    padding: 1.5rem;
+  }
+  .settings-title {
+    font-size: 1.5rem;
+  }
+  .settings-select,
+  .settings-btn {
+    font-size: 0.95rem;
+  }
 }

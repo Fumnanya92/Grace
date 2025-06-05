@@ -1,37 +1,50 @@
-"""
-LangChain tool to query live Shopify product information.
+import asyncio
+from stores.shopify_async import get_products_for_image_matching
+from modules.image_processing_module import ImageProcessor
+from modules.s3_service import S3Service
 
-This module defines a LangChain tool `shopify_product_lookup` that:
-1. Detects if a user query is about a product.
-2. If yes, retrieves matching product details from the Shopify store (using the live API).
-3. Returns a formatted text response with the product's price, stock, and availability, or an empty string if no product was found or the query is not about a product.
+async def main():
+    # 1) Initialize S3Service & ImageProcessor
+    s3 = S3Service()
+    ip = ImageProcessor(s3)
+    await ip.initialize()
+    print(f"[TEST] Loaded {len(ip.design_catalog)} designs from S3.")
 
-This tool can be used with a LangChain agent (e.g. a zero-shot-react-description agent) to answer questions about product availability.
-"""
-import logging
-from langchain.tools import tool
-from stores.shopify_async import get_product_details, is_product_query, format_product_response
-
-# Logger setup
-logger = logging.getLogger("shopify_langchain")
-
-@tool("shopify_product_lookup", description="Look up price, stock, or availability of a product in the Shopify store.")
-def shopify_tool(query: str) -> str:
-    """Look up price, stock, or availability of a product in the Shopify store."""
-    # If the query does not appear to be about a product, return no result (allow agent to continue reasoning).
-    if not is_product_query(query):
-        logger.info("Query is not a product inquiry: %s", query)
-        return ""
     try:
-        product = get_product_details(query)
-        if not product:
-            logger.info("No product found for query: %s", query)
-            return "Sorry, I couldn't find that product."
-        # If a product is found, format the product details into a response string.
-        response = format_product_response(product)
-        logger.info("Product lookup successful for query: %s", query)
-        return response
-    except Exception as exc:
-        # Log the exception and return a safe error message.
-        logger.exception("Shopify product lookup failed for query '%s': %s", query, exc)
-        return "Sorry, I couldn't retrieve live product information."
+        # 2) Fetch all Shopify products
+        all_shopify = await get_products_for_image_matching()
+        subset = all_shopify  # Load the entire catalog
+        print(f"[TEST] Retrieved {len(all_shopify)} products from Shopify.")
+
+        # 3) Load all products into the catalog (you'll see progress printed)
+        await ip.load_external_catalog(subset)
+        print(f"[TEST] Combined catalog size is now {len(ip.design_catalog)} total entries.")
+
+        # 4) Pick the first sample with a valid image_url
+        sample = next((p for p in subset if p.get("image_url")), None)
+        if not sample:
+            print("[TEST] No Shopify image URL found to test with.")
+            return
+
+        print(f"[TEST] Using sample product '{sample['name']}' with image_url:\n       {sample['image_url']}")
+
+        # 5) Run handle_image on that sample image
+        reply = await ip.handle_image("unit-test", sample["image_url"])
+        print("\n[TEST] handle_image reply:\n" + "-" * 40)
+        print(reply)
+        print("-" * 40)
+
+        # 6) Sanity check
+        if sample["name"].lower() in reply.lower():
+            print("[TEST] SUCCESS: sample product name found in reply.")
+        else:
+            print("[TEST] FAILURE: sample product name NOT found in reply.")
+    finally:
+        await ip.close()
+        print("[TEST] ImageProcessor closed successfully.")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n[TEST] Script interrupted. Exiting gracefully.")

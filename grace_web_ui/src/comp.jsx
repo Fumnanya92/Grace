@@ -26,7 +26,7 @@ const DevAssistant = () => {
   useEffect(scrollToBottom, [messages, loading]);
 
   const sendQuery = async (e) => {
-    if (e) e.preventDefault(); // Prevent default form submission behavior
+    e.preventDefault();
     const trimmed = query.trim();
     if (!trimmed) return;
 
@@ -57,17 +57,12 @@ const DevAssistant = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault(); // Prevent adding a new line
-      sendQuery(); // Send the message
-    }
-  };
-
   return (
     <div className="dev-assistant-container">
       {/* Header */}
-      <header className="dev-assistant-header">🧠 Grace Dev Assistant</header>
+      <header className="dev-assistant-header">
+        🧠 Grace Dev Assistant
+      </header>
 
       {/* Chat Area */}
       <main className="dev-assistant-chat-area">
@@ -139,7 +134,6 @@ const DevAssistant = () => {
           className="dev-assistant-query-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown} // Listen for Enter key
           placeholder="Ask Grace anything…"
           rows={2}
         />

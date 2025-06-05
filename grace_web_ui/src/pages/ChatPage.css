@@ -1,38 +1,197 @@
-.chat-input-area {
+/*------------------------------------------*/
+/*  ChatPage.css                             */
+/*------------------------------------------*/
+
+/* Container & Layout */
+.chat-page-container {
   display: flex;
-  align-items: center;
-  padding: 10px;
-  border-top: 1px solid #ddd;
-  background-color: #f9f9f9;
+  flex-direction: column;
+  height: 100vh;                 /* Fill the viewport */
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
-.chat-input-area input[type="text"] {
-  flex-grow: 1;
-  padding: 10px;
+/* Header */
+.chat-header {
+  flex-shrink: 0;
+  background-color: var(--color-sidebar-bg);
+  border-bottom: 1px solid var(--color-shadow);
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 4px var(--color-shadow);
+}
+.chat-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-brand);
+}
+
+/* Messages Area */
+.chat-messages-area {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background-color: #f7f9fc; /* Slight off-white */
+}
+
+/* Wrapper to align bubbles left/right */
+.bubble-wrapper {
+  display: flex;
+  width: 100%;
+}
+
+/* User bubbles on the right */
+.bubble-wrapper.user {
+  justify-content: flex-end;
+}
+/* Grace bubbles on the left */
+.bubble-wrapper.grace {
+  justify-content: flex-start;
+}
+
+/* ChatBubble component is assumed to set its own padding/background based on 'sender' prop,
+   but you can add overriding styles here if needed: */
+.chat-bubble.user {
+  background-color: var(--color-btn-primary);
+  color: #fff;
+}
+.chat-bubble.grace {
+  background-color: #e0e0e0;
+  color: #000;
+}
+
+/*------------------------------------------*/
+/*  ChatInput Wrapper (existing ChatInput)   */
+/*------------------------------------------*/
+
+.chat-input-wrapper {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-shadow);
+  background-color: #ffffff;
+}
+
+/* You already have .chat-input-area inside ChatInput; ensure it stretches full width */
+.chat-input-wrapper .chat-input-area {
+  width: 100%;
+}
+
+/*------------------------------------------*/
+/*  Voice + Raw Query Section                */
+/*------------------------------------------*/
+
+.voice-query-wrapper {
+  flex-shrink: 0;
+  background: #ffffff;
+  border-top: 1px solid var(--color-shadow);
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.voice-query-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
   border: 1px solid #ccc;
-  border-radius: 20px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: var(--color-text);
+  resize: vertical;
+  min-height: 64px;
+  transition: border-color var(--transition-short), box-shadow var(--transition-short);
+}
+.voice-query-textarea:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(139, 74, 88, 0.15);
   outline: none;
 }
 
-.chat-input-area button {
-  margin-left: 10px;
-  padding: 10px 16px;
-  background-color: #4caf50;
-  color: white;
+.voice-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.voice-toggle-btn,
+.voice-send-btn {
+  padding: 0.5rem 1rem;
   border: none;
-  border-radius: 20px;
-  font-weight: bold;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-short), transform var(--transition-short);
+}
+.voice-toggle-btn {
+  background-color: var(--color-secondary, #a1887f);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(161, 136, 127, 0.3);
+}
+.voice-toggle-btn:hover {
+  background-color: var(--color-btn-secondary-hover);
+}
+.voice-toggle-btn:active {
+  transform: scale(0.97);
 }
 
-.chat-input-area button:hover {
-  background-color: #45a049;
+.voice-send-btn {
+  background-color: var(--color-btn-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(240, 98, 146, 0.3);
+}
+.voice-send-btn:hover {
+  background-color: var(--color-btn-primary-hover);
+}
+.voice-send-btn:active {
+  transform: scale(0.97);
 }
 
-.image-upload-label {
-  cursor: pointer;
-  margin-left: 8px;
-  font-size: 1.2rem;
+/*------------------------------------------*/
+/*  LLM Response Box                         */
+/*------------------------------------------*/
+
+.llm-response-box {
+  flex-shrink: 0;
+  background: #ffffff;
+  border-left: 4px solid var(--color-brand);
+  padding: 1rem 1.5rem;
+  margin: 1rem 1.5rem 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px var(--color-shadow);
+  font-size: 0.95rem;
+  color: var(--color-text-primary);
+}
+
+/*------------------------------------------*/
+/*  Scrollbar Styling                        */
+/*------------------------------------------*/
+
+.chat-messages-area::-webkit-scrollbar {
+  width: 8px;
+}
+.chat-messages-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-messages-area::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+/*------------------------------------------*/
+/*  Responsive Adjustments                    */
+/*------------------------------------------*/
+
+@media (max-width: 600px) {
+  .voice-buttons {
+    flex-direction: column;
+  }
+  .voice-toggle-btn,
+  .voice-send-btn {
+    width: 100%;
+  }
 }

@@ -1,42 +1,92 @@
+/* ChatInput.css */
+
 .chat-input-form {
   display: flex;
   align-items: center;
-  padding: 1rem;
-  background-color: #f1f1f1;
-  border-top: 1px solid #ddd;
+  padding: 0.75rem 1rem;
+  background-color: #ffffff;
+  border-top: 1px solid #e5e5e5;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
-.chat-input {
-  flex-grow: 1;
-  padding: 0.8rem;
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  font-size: 1rem;
-  outline: none;
-}
-
+/* Attachment (paperclip) icon */
 .image-upload-label {
   cursor: pointer;
-  margin-right: 0.5rem;
-  font-size: 1.5rem;
+  margin-right: 0.75rem;
+  font-size: 1.25rem;
+  color: #6b7280; /* gray-500 */
+  transition: color 0.2s;
+}
+.image-upload-label:hover {
+  color: #111827; /* gray-900 */
 }
 
+/* Text input */
+.chat-input {
+  flex-grow: 1;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db; /* gray-300 */
+  border-radius: 9999px;     /* pill shape */
+  background-color: #f9fafb; /* gray-50 */
+  font-size: 1rem;
+  color: #111827;            /* gray-900 */
+  outline: none;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
+}
+.chat-input:focus {
+  background-color: #ffffff;
+  border-color: #3b82f6;     /* blue-500 */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Send button */
 .send-button {
-  padding: 0.8rem 1.2rem;
-  background-color: #4caf50;
-  color: white;
+  margin-left: 0.75rem;
+  padding: 0.75rem;
+  background-color: #3b82f6; /* blue-500 */
+  color: #ffffff;
   border: none;
-  border-radius: 10px;
+  border-radius: 50%;        /* circular */
   font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
 }
-
 .send-button:disabled {
-  background-color: #ccc;
+  background-color: #a1a1aa; /* gray-400 */
   cursor: not-allowed;
 }
-
 .send-button:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: #2563eb; /* blue-600 */
+}
+.send-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Hide file input itself */
+.chat-input-form input[type="file"] {
+  display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .chat-input-form {
+    padding: 0.5rem;
+  }
+  .image-upload-label {
+    margin-right: 0.5rem;
+    font-size: 1rem;
+  }
+  .send-button {
+    padding: 0.6rem;
+    font-size: 0.9rem;
+  }
 }

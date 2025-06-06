@@ -18,7 +18,3 @@ async def shopify_product_lookup(query: str) -> str:
         logger.exception("Shopify product lookup failed for query '%s': %s", query, exc)
         return "Sorry, I couldn't retrieve live product information."
 
-# Example: Inspecting tool metadata
-print(shopify_product_lookup.name)        # "shopify_product_lookup"
-print(shopify_product_lookup.description) # "Look up price, stock, or availability of a product in the Shopify store."
-print(shopify_product_lookup.args)        # JSON schema of the arguments

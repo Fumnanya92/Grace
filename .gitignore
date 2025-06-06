@@ -33,6 +33,7 @@ env/
 memory.db
 flow_progress.json
 speech_library.json
+!config/speech_library.json
 tenant_map.json
 
 # Test and temp files

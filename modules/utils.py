@@ -64,7 +64,15 @@ def _rebuild_tables(data: dict) -> None:
 def _load_speech_library_into_tables() -> None:
     """Read speech_library.json (training_data format) on startup."""
     if not SPEECH_LIBRARY_FILE.exists():
-        logger.warning("speech_library.json not found; starting with empty tables")
+        logger.warning("speech_library.json not found; creating default file")
+        try:
+            ensure_config_structure()
+            SPEECH_LIBRARY_FILE.write_text(json.dumps({"training_data": []}, indent=2), encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error creating default speech_library.json: %s", e)
+            return
+        data = {"training_data": []}
+        _rebuild_tables(data)
         return
 
     try:

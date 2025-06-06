@@ -17,7 +17,8 @@ Grace is a fully autonomous, AI-powered sales assistant designed to operate over
 9. [Business Model & Monetization](#business-model--monetization)
 10. [Privacy & Compliance](#privacy--compliance)
 11. [Contributing](#contributing)
-12. [License](#license)
+12. [Running Tests](#running-tests)
+13. [License](#license)
 
 ---
 
@@ -281,6 +282,24 @@ This feature is only available on premium plans because it involves:
 1. Fork the repo and create your branch.
 2. Make your changes and write tests.
 3. Submit a pull request with a clear description.
+
+---
+
+## Running Tests
+
+The automated test suite relies on several asynchronous libraries. Ensure the
+following packages are installed before running tests:
+
+- `aiosqlite`
+- `aiohttp`
+- `pytest`
+- `pytest-asyncio`
+
+Run the tests from the project root using:
+
+```bash
+PYTHONPATH=. pytest
+```
 
 ---
 

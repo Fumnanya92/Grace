@@ -682,8 +682,11 @@ def ensure_required_files():
     for file in required_files:
         file_path = os.path.join("config", file)
         if not os.path.exists(file_path):
-            with open(file_path, "w") as f:
-                f.write("{}")
+            with open(file_path, "w", encoding="utf-8") as f:
+                if file == "speech_library.json":
+                    json.dump({"training_data": []}, f, indent=2)
+                else:
+                    f.write("{}")
             logger.warning(f"Created placeholder for missing file: {file}")
 
 @lru_cache(maxsize=1)

@@ -12,7 +12,9 @@ import "./ChatBubble.css";
  *    and render that substring as <img> instead of plain text.
  */
 const ChatBubble = ({ sender, text }) => {
-  const URL_REGEX = /(https?:\/\/\S+\.(?:jpg|jpeg|png|gif))/gi;
+  // Match image URLs and ignore optional Shopify version query like ?v=123
+  const URL_REGEX =
+    /(https?:\/\/\S+?\.(?:jpg|jpeg|png|gif))(?:\?v=\S+)?/gi;
 
   // Split text into lines and handle URLs
   const lines = text.split(/\r?\n/);

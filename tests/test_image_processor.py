@@ -1,6 +1,7 @@
 import unittest
 import asyncio
 import os
+import faiss
 from modules.image_processing_module import ImageProcessor
 from modules.s3_service import S3Service
 from dotenv import load_dotenv
@@ -49,7 +50,7 @@ class TestImageProcessorWithS3(unittest.IsolatedAsyncioTestCase):
         # Dynamically pick an image from the catalog
         test_image = self.processor.design_catalog[0]  # Pick the first image in the catalog
         test_image_id = test_image["id"]
-        test_image_url = await self.processor._presign(test_image_id)
+        test_image_url = await self.processor._get_design_url(test_image_id)
 
         # Process the image
         response = await self.processor.handle_image("sender", test_image_url)
@@ -68,9 +69,11 @@ class TestImageProcessorWithS3(unittest.IsolatedAsyncioTestCase):
         # Extract features from the noise image
         query_features = await asyncio.to_thread(self.processor._extract_features, noise_image)
 
-        # Ensure the noise image does not match any catalog image
-        matches = await self.processor._find_matches(query_features, top_n=3)
-        self.assertEqual(len(matches), 0, "Noise image should not match any catalog image.")
+        # Ensure the noise image does not closely match any catalog image
+        q = query_features.astype(np.float32).reshape(1, -1)
+        faiss.normalize_L2(q)
+        distances, _ = self.processor.faiss_index.search(q, 3)
+        self.assertTrue(all(sim < 0.5 for sim in distances[0]))
 
     async def test_exact_match_dynamic(self):
         """Test handle_image with an image that exactly matches a catalog entry."""
@@ -79,7 +82,7 @@ class TestImageProcessorWithS3(unittest.IsolatedAsyncioTestCase):
         # Dynamically pick an image from the catalog
         test_image = self.processor.design_catalog[0]  # Pick the first image in the catalog
         test_image_id = test_image["id"]
-        test_image_url = await self.processor._presign(test_image_id)
+        test_image_url = await self.processor._get_design_url(test_image_id)
 
         # Process the image
         response = await self.processor.handle_image("sender", test_image_url)

@@ -1,7 +1,7 @@
 """Refreshed Dev‑Assistant module (v1.1)
 
 ▸ Uses langchain‑community imports (>= 0.2).
-▸ Auto‑creates vector store **whenever it is missing or corrupt** (even after you delete `.vector_store`).
+▸ Lazily builds the code vector store on first use and auto‑creates it if missing or corrupt.
 ▸ Still skips corrupt memory entries.
 """
 from __future__ import annotations
@@ -103,16 +103,27 @@ def _build_store() -> FAISS:
     store.save_local(STORE_DIR)
     return store
 
-# Load or create store safely
-try:
-    if (STORE_DIR / "index.faiss").exists():
-        store = FAISS.load_local(STORE_DIR, OpenAIEmbeddings(model="text-embedding-ada-002"))
-    else:
-        store = _build_store()
-except Exception as e:  # Corrupted store → rebuild
-    logger.warning("Vector store load failed (%s) – rebuilding", e)
-    STORE_DIR.mkdir(exist_ok=True)
-    store = _build_store()
+# Lazily loaded vector store
+_store: Optional[FAISS] = None
+
+
+def get_store() -> FAISS:
+    """Return cached store, building or loading it on first use."""
+    global _store
+    if _store is not None:
+        return _store
+    try:
+        if (STORE_DIR / "index.faiss").exists():
+            _store = FAISS.load_local(
+                STORE_DIR, OpenAIEmbeddings(model="text-embedding-ada-002")
+            )
+        else:
+            _store = _build_store()
+    except Exception as e:  # Corrupted store → rebuild
+        logger.warning("Vector store load failed (%s) – rebuilding", e)
+        STORE_DIR.mkdir(exist_ok=True)
+        _store = _build_store()
+    return _store
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 
@@ -120,7 +131,7 @@ except Exception as e:  # Corrupted store → rebuild
 def code_search(query: str) -> str:
     """Search repository code and return up to 4 snippets."""
     try:
-        docs = store.similarity_search(query, k=4)
+        docs = get_store().similarity_search(query, k=4)
         return "\n\n".join(f"{d.metadata['path']}\n{d.page_content}" for d in docs)
     except Exception as e:
         return f"❌ code_search failed: {e}"

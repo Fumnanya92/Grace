@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import random
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Set
@@ -253,3 +254,24 @@ async def compute_state_id() -> str:
     with open("config/config.json", "rb") as f:
         config_sha = hashlib.sha1(f.read()).hexdigest()
     return hashlib.sha1((catalog_sha + config_sha).encode()).hexdigest()
+
+
+def resolve_reference(user_message: str, chat_history: list) -> str:
+    """Replace vague references like 'it' with the last product mentioned."""
+    if re.search(r"\b(it|this|that)\b", user_message, re.I):
+        for turn in reversed(chat_history):
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get("user_message", ""),
+                re.I,
+            )
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+            match = re.search(
+                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
+                turn.get("bot_reply", ""),
+                re.I,
+            )
+            if match:
+                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
+    return user_message

@@ -25,7 +25,7 @@ from logging_config import configure_logger
 logger = configure_logger("bot_responses")
 from modules.langchain_agent import GraceAgent
 from modules.grace_brain import GraceBrain
-from modules.utils import detect_picture_request, compute_state_id
+from modules.utils import detect_picture_request, compute_state_id, resolve_reference
 from modules.intent_recognition_module import recognize_intent
 from modules.shopify_agent import agent, shopify_product_lookup, shopify_create_order, shopify_track_order
 from modules.payment_module import PaymentHandler
@@ -90,25 +90,6 @@ def fix_whatsapp_bold(text):
     text = re.sub(r"__(.*?)__", r"*\1*", text)
     return text
 
-def resolve_reference(user_message: str, chat_history: list) -> str:
-    """
-    Replace ambiguous references like 'it', 'this', 'that' in user_message
-    with the last mentioned product/service/item in chat_history.
-    """
-    if re.search(r"\b(it|this|that)\b", user_message, re.I):
-        for turn in reversed(chat_history):
-            # Look for product/service/item/plan/course/package in user or bot messages
-            match = re.search(
-                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
-                turn.get('user_message', ''), re.I)
-            if match:
-                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
-            match = re.search(
-                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
-                turn.get('bot_reply', ''), re.I)
-            if match:
-                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
-    return user_message
 
 def format_conversation(history: List[Dict[str, str]]) -> str:
     formatted = [

@@ -27,6 +27,7 @@ from modules.utils import (
     get_canned_response,
     update_speech_library,
     INTENT_PHRASES,
+    resolve_reference,
 )
 from stores.shopify_async import get_products_for_image_matching
 
@@ -53,26 +54,6 @@ def _load_json(path: Path, default: Optional[dict] = None) -> dict:
 async def fetch_catalog() -> List[Dict[str, Any]]:
     """Fetch the product catalog dynamically from Shopify, adapted for prompts."""
     return await get_products_for_image_matching()
-
-def resolve_reference(user_message: str, chat_history: list) -> str:
-    """
-    Replace ambiguous references like 'it', 'this', 'that' in user_message
-    with the last mentioned product/service/item in chat_history.
-    """
-    if re.search(r"\b(it|this|that)\b", user_message, re.I):
-        for turn in reversed(chat_history):
-            # Look for product/service/item/plan/course/package in user or bot messages
-            match = re.search(
-                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
-                turn.get('user_message', ''), re.I)
-            if match:
-                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
-            match = re.search(
-                r"\b([A-Za-z0-9 \-]+(dress|set|shirt|service|product|item|plan|course|package))\b",
-                turn.get('bot_reply', ''), re.I)
-            if match:
-                return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
-    return user_message
 
 # ---------------------------------------------------------------------
 # GraceBrain Class

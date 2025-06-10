@@ -89,3 +89,22 @@ async def test_process_intents_no_match(bot_responses):
     """Test processing intents with no matching handlers."""
     response = await bot_responses.process_intents(["unknown_intent"], "Unknown message", [])
     assert response is None
+
+
+@pytest.mark.asyncio
+async def test_handle_text_message_track_order(bot_responses):
+    """Test order tracking message with valid order ID."""
+    with patch("modules.intent_recognition_module.recognize_intent", return_value=["shopify_track_order"]), \
+         patch("modules.bot_responses.shopify_track_order.ainvoke", new_callable=AsyncMock) as mock_track:
+        mock_track.return_value = "Shipped"
+        response = await bot_responses.handle_text_message("sender", "Where is my order 5678?", [])
+        mock_track.assert_awaited_once_with("5678")
+        assert response == "Shipped"
+
+
+@pytest.mark.asyncio
+async def test_handle_text_message_track_order_no_id(bot_responses):
+    """Test order tracking when no ID is present."""
+    with patch("modules.intent_recognition_module.recognize_intent", return_value=["shopify_track_order"]):
+        response = await bot_responses.handle_text_message("sender", "Where is my order?", [])
+        assert "couldn't find an order id".lower() in response.lower()

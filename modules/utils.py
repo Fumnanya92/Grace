@@ -275,3 +275,12 @@ def resolve_reference(user_message: str, chat_history: list) -> str:
             if match:
                 return re.sub(r"\b(it|this|that)\b", match.group(0), user_message, flags=re.I)
     return user_message
+
+
+def extract_order_id(text: str) -> Optional[str]:
+    """Return an order ID if one can be parsed from the message."""
+    # Typical patterns: "order 1234", "order #1234", "id 1234", or just "1234".
+    match = re.search(r"(?:order\s*(?:id|number)?\s*#?|id\s*#?)(\d{4,})", text, re.I)
+    if not match:
+        match = re.search(r"#?(\d{4,})\b", text)
+    return match.group(1) if match else None

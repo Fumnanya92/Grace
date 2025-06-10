@@ -25,7 +25,12 @@ from logging_config import configure_logger
 logger = configure_logger("bot_responses")
 from modules.langchain_agent import GraceAgent
 from modules.grace_brain import GraceBrain
-from modules.utils import detect_picture_request, compute_state_id, resolve_reference
+from modules.utils import (
+    detect_picture_request,
+    compute_state_id,
+    resolve_reference,
+    extract_order_id,
+)
 from modules.intent_recognition_module import recognize_intent
 from modules.shopify_agent import agent, shopify_product_lookup, shopify_create_order, shopify_track_order
 from modules.payment_module import PaymentHandler
@@ -234,7 +239,9 @@ class BotResponses:
             )
 
         elif intent == "shopify_track_order":
-            order_id = ""  # TODO: Implement order_id extraction from message
+            order_id = extract_order_id(message)
+            if not order_id:
+                return "Sorry, I couldn't find an order ID in your message."
             result = await shopify_track_order.ainvoke(order_id)
             return str(result)
 

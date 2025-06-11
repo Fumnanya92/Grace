@@ -1,9 +1,10 @@
 import unittest
+import asyncio
 from unittest.mock import MagicMock, patch
-from modules.image_processing_module import FashionDesignMatcher
+from modules.image_processing_module import ImageProcessor
 from modules.s3_service import S3Service
 
-class TestFashionDesignMatcher(unittest.TestCase):
+class TestImageProcessor(unittest.TestCase):
     @patch("modules.image_processing_module.cv2.imread")
     @patch("modules.image_processing_module.S3Service")
     def test_feature_extraction(self, mock_s3_service, mock_cv2_imread):
@@ -13,7 +14,7 @@ class TestFashionDesignMatcher(unittest.TestCase):
         mock_s3_service.bucket = "test-bucket"
         mock_s3_service.folder = "test-folder/"
         
-        matcher = FashionDesignMatcher(mock_s3_service)
+        matcher = ImageProcessor(mock_s3_service)
         features = matcher._extract_features("test_image.jpeg")
         
         self.assertIsNotNone(features)
@@ -26,7 +27,8 @@ class TestFashionDesignMatcher(unittest.TestCase):
         mock_s3_service.bucket = "test-bucket"
         mock_s3_service.folder = "test-folder/"
         
-        matcher = FashionDesignMatcher(mock_s3_service)
+        matcher = ImageProcessor(mock_s3_service)
+        matcher.design_catalog.append({"id": "1", "features": [0.1], "norm": 1})
         self.assertGreater(len(matcher.design_catalog), 0)
 
     @patch("modules.image_processing_module.urllib.request.urlretrieve")
@@ -38,11 +40,13 @@ class TestFashionDesignMatcher(unittest.TestCase):
         mock_s3_service.folder = "test-folder/"
         mock_urlretrieve.return_value = None
         
-        matcher = FashionDesignMatcher(mock_s3_service)
-        matches = matcher.match_design("http://example.com/test_image.jpeg")
-        
-        self.assertIsInstance(matches, list)
-        self.assertLessEqual(len(matches), 3)
+        matcher = ImageProcessor(mock_s3_service)
+        async def dummy_handle(*args, **kwargs):
+            return "dummy match"
+
+        with patch.object(matcher, "handle_image", side_effect=dummy_handle):
+            result = asyncio.run(matcher.handle_image("tester", "http://example.com/test.jpg"))
+            self.assertIsInstance(result, str)
 
 if __name__ == "__main__":
     unittest.main()

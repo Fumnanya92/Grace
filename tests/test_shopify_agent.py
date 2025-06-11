@@ -52,3 +52,4 @@ async def test_shopify_track_order_tool():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(test_shopify_product_lookup_tool())
+

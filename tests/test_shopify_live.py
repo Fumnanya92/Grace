@@ -36,4 +36,5 @@ async def test_shopify_product_lookup_via_agent() -> None:
     assert isinstance(answer, str) and answer.strip(), f"No reply from agent: {answer}"
     lowered = answer.lower()
     assert "price" in lowered, "Missing price info in agent response"
+
     assert "stock" in lowered or "out of stock" in lowered, "Missing stock info in agent response"

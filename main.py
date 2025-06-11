@@ -561,6 +561,56 @@ async def dev_grade(req: Request):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/dev/stats")
+async def get_dev_stats():
+    """
+    Returns statistics for the frontend, such as total chats, memory count, and recent requests.
+    """
+    try:
+        # Example: Fetch total chats from logs
+        total_chats = 0
+        log_files = [f for f in os.listdir("logs") if f.endswith("_chat_history.json")]
+        for log_file in log_files:
+            async with aiofiles.open(os.path.join("logs", log_file), "r", encoding="utf-8") as f:
+                try:
+                    data = json.loads(await f.read())
+                    total_chats += len(data)
+                except json.JSONDecodeError:
+                    continue
+
+        # Example: Fetch memory count from the database
+        memory_count = 0
+        try:
+            async with aiosqlite.connect("memory.db") as conn:
+                cursor = await conn.execute("SELECT COUNT(*) FROM user_memory")
+                memory_count = (await cursor.fetchone())[0]
+        except Exception as e:
+            logger.error(f"Error fetching memory count: {e}")
+
+        # Example: Fetch recent requests from logs
+        recent_requests = []
+        if log_files:
+            latest_log_file = sorted(log_files, reverse=True)[0]
+            async with aiofiles.open(os.path.join("logs", latest_log_file), "r", encoding="utf-8") as f:
+                try:
+                    data = json.loads(await f.read())
+                    recent_requests = [
+                        entry["user_message"] for entry in data[-5:]
+                    ]  # Last 5 user messages
+                except json.JSONDecodeError:
+                    pass
+
+        # Return the stats
+        return {
+            "totalChats": total_chats,
+            "memoryCount": memory_count,
+            "recentRequests": recent_requests,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in /dev/stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch stats.")
+
 @app.get("/memory")
 async def get_all_memories():
     """

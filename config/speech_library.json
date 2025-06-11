@@ -1,3 +1,52 @@
 {
-  "training_data": []
+  "training_data": [
+    {
+      "intent": "ask_for_designs",
+      "phrase": "theres this one that have been buzzing everywhere, i have a picture of it",
+      "response": "Feel free to send the picture! I can help identify it for you. The Adora Adire Dress is trending and available for NGN100,000. Would you like more details or to make a purchase? \ud83d\ude0a",
+      "confidence": 0.5
+    },
+    {
+      "intent": "ask_for_designs",
+      "phrase": "i need the bloom dress",
+      "response": "Let me check our catalog for the Bloom Dress details. Please hold on for a moment.",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "i want to buy one of you outfit",
+      "response": "Sure! Here are some of our stunning outfits:\n\n1. **Adora Adire Dress**: NGN100,000.00  \n   ![Adora Adire Dress](https://example.com/adora_adire_dress.jpg)\n\n2. **Adora Dress**: NGN140,000.00  \n   ![Adora Dress](https://example.com/adora_dress.jpg)\n\n3. **Ama Asoke Set**: NGN155,000.00  \n   ![Ama Asoke Set](https://example.com/ama_asoke_set.jpg)\n\n4. **Ama Asoke Shirt**: NGN55,000.00  \n   ![Ama Asoke Shirt](https://example.com/ama_asoke_shirt.jpg)\n\n5. **Ayoola Bubu**: NGN80,000.00  \n   ![Ayoola Bubu](https://example.com/ayoola_bubu.jpg)\n\nLet me know if any catches your eye!",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "yes its the bloom dress, do you have that in stock?",
+      "response": "The Adora Adire Dress is in stock for NGN100,000. It's a beautiful choice! Would you like to proceed with the purchase? \ud83d\ude0a",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "i want the bloom dress",
+      "response": "The Bloom Dress is a stunning choice! Would you like more details or assistance with placing an order? \ud83d\ude0a",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "yes i want to place the order",
+      "response": "Great! Which item would you like to order? Here are some options:\n\n- **Adora Adire Dress**: NGN100,000.00  \n- **Adora Dress**: NGN140,000.00  \n- **Ama Asoke Set**: NGN155,000.00  \n- **Ama Asoke Shirt**: NGN55,000.00  \n- **Ayoola Bubu**: NGN80,000.00  \n\nLet me know your choice! \ud83d\ude0a",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "i am waiting",
+      "response": "If you're considering a purchase, I recommend the Adora Adire Dress for NGN100,000. It's a beautiful choice! Let me know if you need more details or assistance. \ud83d\ude0a",
+      "confidence": 0.5
+    },
+    {
+      "intent": "selection_confirmation",
+      "phrase": "ido you have the bloom dress in stock",
+      "response": "Let me check our system for the availability of the Bloom Dress for you. One moment, please.",
+      "confidence": 0.5
+    }
+  ]
 }

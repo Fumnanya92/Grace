@@ -11,8 +11,21 @@ const ChatPage = () => {
   const messagesEndRef = useRef(null);
   const [query, setQuery] = useState("");
   const [response, setResponse] = useState("");
-  const { listening, toggle } = useSpeechRecognition({
-    onResult: (text) => setQuery(text), // Update the query with the recognized speech
+  const [isVoiceInputOpen, setIsVoiceInputOpen] = useState(false); // Track if the voice input box is open
+  const [speechError, setSpeechError] = useState(null); // Track speech recognition errors
+  const [isListeningLoading, setIsListeningLoading] = useState(false); // Track loading state for speech recognition
+
+  const debounceTimeout = useRef(null); // Ref for debouncing speech recognition updates
+
+  const { listening, toggle, error: speechRecognitionError } = useSpeechRecognition({
+    onResult: (text) => {
+      // Debounce updates to the query state
+      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+      debounceTimeout.current = setTimeout(() => {
+        setQuery((prevQuery) => `${prevQuery} ${text}`.trim());
+        setIsVoiceInputOpen(true); // Keep the voice input box open
+      }, 300); // 300ms debounce
+    },
     lang: "en-US",
   });
 
@@ -20,6 +33,15 @@ const ChatPage = () => {
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToBottom, [messages, isLoading]);
+
+  /** Handle speech recognition errors */
+  useEffect(() => {
+    if (speechRecognitionError) {
+      setSpeechError("Microphone access denied or unavailable.");
+    } else {
+      setSpeechError(null);
+    }
+  }, [speechRecognitionError]);
 
   /** Helper – hit /webhook with FormData the way Twilio would */
   const callWebhook = async (formData) => {
@@ -128,6 +150,7 @@ const ChatPage = () => {
       setResponse(data.result || "No response");
     } catch (error) {
       console.error("Error sending query:", error);
+      setIsVoiceInputOpen(false); // Close the voice input box after sending
     }
   };
 
@@ -170,24 +193,45 @@ const ChatPage = () => {
         />
       </div>
 
-      {/* Voice + Raw Query Box */}
-      <div className="voice-query-wrapper">
-        <textarea
-          className="voice-query-textarea"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown} // Listen for Enter key
-          placeholder="Type your query or use voice input…"
-        />
-        <div className="voice-buttons">
-          <button className="voice-toggle-btn" onClick={toggle}>
-            {listening ? "Stop Listening" : "Start Listening"}
-          </button>
-          <button className="voice-send-btn" onClick={handleSend}>
-            Send
-          </button>
+      {/* Conditionally render the voice input box */}
+      {(listening || isVoiceInputOpen) && (
+        <div className="voice-query-wrapper">
+          <textarea
+            className="voice-query-textarea"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown} // Listen for Enter key
+            placeholder="Listening... Speak your query"
+          />
+          <div className="voice-buttons">
+            <button className="voice-send-btn" onClick={() => sendMessage(query)}>
+              Send
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Voice toggle button */}
+      <div className="voice-buttons">
+        <button
+          className="voice-toggle-btn"
+          onClick={() => {
+            setIsListeningLoading(true); // Show loading indicator
+            toggle(); // Start or stop listening
+            setIsVoiceInputOpen(true); // Ensure the voice input box remains open
+            setIsListeningLoading(false); // Hide loading indicator
+          }}
+        >
+          {isListeningLoading
+            ? "Loading..."
+            : listening
+            ? "Stop Listening"
+            : "Start Listening"}
+        </button>
       </div>
+
+      {/* Speech recognition error feedback */}
+      {speechError && <div className="speech-error">{speechError}</div>}
 
       {/* Assistant’s LLM response */}
       {response && <div className="llm-response-box">{response}</div>}
